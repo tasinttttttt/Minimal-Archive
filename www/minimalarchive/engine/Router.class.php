@@ -1,15 +1,10 @@
 <?php
 class Router
 {
-    private $rootUrl;
-    private $baseFolder;
-    private $routes;
-
-    public function __construct($routes = [], $rootUrl = ROOT_URL, $baseFolder = BASE_FOLDER)
-    {
-        $this->rootUrl = $rootUrl;
-        $this->baseFolder = $baseFolder;
-        $this->routes = $routes;
+    public function __construct(
+        private array $routes = [],
+        private string $rootUrl = ROOT_URL,
+    ) {
         $this->start();
     }
 
@@ -47,7 +42,7 @@ class Router
      * @param string      $script file to load
      * @param string|null $name   optional name to ease retrieval
      */
-    public function addRoute(string $match, string $script, string $name = null)
+    public function addRoute(string $match, string $script, ?string $name = null)
     {
         $this->routes[] = array(
             'name' => null === $name ? random_bytes(4) : $name,

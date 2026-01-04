@@ -15,6 +15,7 @@ define('VAR_FOLDER', BASE_FOLDER . DS . 'var');
 define('DEFAULT_ACCOUNTFILE', VAR_FOLDER . DS . '.account');
 define('DEFAULT_SESSIONSFILE', VAR_FOLDER . DS . '.sessions');
 define('DEFAULT_LOGFILE', VAR_FOLDER . DS . 'debug.log');
+define('DEFAULT_CONFIGFILE', VAR_FOLDER . DS . '.config');
 
 define('ROOT_URL', trim(substr($_SERVER['SCRIPT_NAME'], 0, strrpos($_SERVER['SCRIPT_NAME'], '/')), '/'));
 
@@ -23,6 +24,7 @@ define('SESSION_MAXDURATION', 2);
 
 session_start();
 
+include_once 'vendor/autoload.php';
 include_once 'functions.php';
 include_once 'class_loader.php';
 

@@ -572,7 +572,7 @@
     )
   };
 
-  const API_URL = baseUrl() + '/api';
+  baseUrl() + '/api';
 
   const EVENT_IMAGE_UPDATE = 'image-update';
   const EVENT_STATUS_CHANGE = 'status-change';
@@ -1029,4 +1029,4 @@
     gallery.reset();
   });
 
-}());
+})();

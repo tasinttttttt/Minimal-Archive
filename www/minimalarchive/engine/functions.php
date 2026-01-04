@@ -3,14 +3,12 @@ if (!defined('minimalarchive')) {
     redirect('/');
 }
 
+use \Firebase\JWT\JWT;
+
 /**
  * Detects if a needle exists in an array by key
- * @param  any     $needle   what to find
- * @param  string     $key      array key to check
- * @param  array|null $haystack array of arrays to search
- * @return bool
  */
-function array_key_exists_in_array_of_arrays($needle, string $key, array $haystack = null)
+function array_key_exists_in_array_of_arrays(string|int $needle, ?string $key, ?array $haystack): bool
 {
     if (!$needle || !$key || !$haystack || !count($haystack)) {
         return false;
@@ -25,10 +23,8 @@ function array_key_exists_in_array_of_arrays($needle, string $key, array $haysta
 
 /**
  * Redirects to absolute or relative url
- * @param  string $url
- * @return [type]      [description]
  */
-function redirect($url)
+function redirect(string $url): never
 {
     if (isAbsoluteUrl($url)) {
         header('location: ' . $url);
@@ -40,10 +36,8 @@ function redirect($url)
 
 /**
  * Detects absolute url
- * @param  string  $url
- * @return boolean      [description]
  */
-function isAbsoluteUrl($url)
+function isAbsoluteUrl(string $url): bool
 {
     $pattern = "/^(?:ftp|https?|feed)?:?\/\/(?:(?:(?:[\w\.\-\+!$&'\(\)*\+,;=]|%[0-9a-f]{2})+:)*
     (?:[\w\.\-\+%!$&'\(\)*\+,;=]|%[0-9a-f]{2})+@)?(?:
@@ -55,12 +49,10 @@ function isAbsoluteUrl($url)
 
 /**
  * Gets file lines into an array
- * @param  string $file filename
- * @return array       [description]
  */
-function file_to_lines(string $file)
+function file_to_lines(string $file): array
 {
-    $result = array();
+    $result = [];
     if (file_exists($file)) {
         return explode("\n", file_get_contents($file));
     }
@@ -69,13 +61,10 @@ function file_to_lines(string $file)
 
 /**
  * Turns a textfile into an associative array given a separator
- * @param  string $file         filename
- * @param  string $separator
- * @return array                can be empty
  */
-function textFileToArray(string $file, string $separator = ':')
+function textFileToArray(string $file, string $separator = ':'): array
 {
-    $result = array();
+    $result = [];
     $lines = file_to_lines($file);
     if (is_array($lines) && count($lines)) {
         $i = -1;
@@ -91,27 +80,22 @@ function textFileToArray(string $file, string $separator = ':')
 
 /**
  * Returns list of filenames in folder, provided an array of extensions
- * @param  string|null $folder    folder to scan
- * @param  array       $supported array of extensions
- * @return array                  can be an empty array
  */
-function getFilenamesInFolder(string $folder = null, array $supported = [])
+function getFilenamesInFolder(?string $folder, array $supported_extensions = []): array
 {
     if (!$folder || !is_dir($folder)) {
         throw new Exception('no_folder');
-        return array();
     }
-    if (!is_array($supported)) {
+    if (!is_array($supported_extensions)) {
         throw new Exception('no_supported_files_provided');
-        return array();
     }
-    $result = array();
+    $result = [];
     $files = scandir($folder);
     $i = -1;
     while (++$i < count($files)) {
         if ($files[$i] != "." && $files[$i] != "..") {
             $extension = strtolower(pathinfo($files[$i], PATHINFO_EXTENSION));
-            if (in_array($extension, $supported)) {
+            if (in_array($extension, $supported_extensions)) {
                 $result[] = htmlspecialchars($files[$i]);
             }
         }
@@ -146,7 +130,7 @@ function getFontByName($name, $folder = 'assets/fonts')
  * @param  string|null $folder folder to look fonts for
  * @return array
  */
-function getFontsInFolder(string $folder = null)
+function getFontsInFolder(?string $folder = null)
 {
     $supported_formats = array(
         'otf' => 'opentype',
@@ -156,7 +140,7 @@ function getFontsInFolder(string $folder = null)
     );
     try {
         $files = getFilenamesInFolder(ROOT_FOLDER . DS . $folder, array_keys($supported_formats));
-        $fonts = array();
+        $fonts = [];
         foreach ($files as $file) {
             $basename = basename($file);
             $extension = pathinfo($basename, PATHINFO_EXTENSION);
@@ -194,7 +178,7 @@ function getFontsStylesheet(array $fonts)
  * @param  array $font
  * @return string
  */
-function getFontStyle(array $font = null)
+function getFontStyle(?array $font = null)
 {
     if ($font && is_array($font)) {
         return "@font-face { font-family: '" . $font['name'] . "'; src: url('" . $font['path'] . "') format('" . $font['type'] . "')\n" . strtolower($font['name']) . "{font-family: '" . $font['name'] . "'\n";
@@ -207,7 +191,7 @@ function getFontStyle(array $font = null)
  * @param  string|null $folder
  * @return array
  */
-function getImagesInFolder(string $folder = null)
+function getImagesInFolder(?string $folder = null)
 {
     $supported_formats = array(
         'gif',
@@ -270,31 +254,34 @@ function check_uploadedfile($file, $uploadfolder = VAR_FOLDER, $max_filesize = 2
  * @param  boolean $overwrite
  * @return string         saved file name
  */
-function save_file($file, $name = null, $folder = VAR_FOLDER, $overwrite = false)
+function save_file(array $file, ?string $name, string $folder = VAR_FOLDER, bool $overwrite = false): string
 {
-    if ($file) {
-        $filename = $name ? $name : $file['name'];
-        if (!$file["tmp_name"] || !$file["type"]) {
-            throw new Exception("bad_file", 1);
-        }
-        $basename = basename($filename);
-        $extension = pathinfo($basename, PATHINFO_EXTENSION);
-        $name = pathinfo($basename, PATHINFO_FILENAME);
-        if ($overwrite) {
-            $correctFilename = $filename;
-        } else {
-            $correctFilename = "";
-            if (file_exists($folder . DS. $basename)) {
-                $correctFilename = sanitize_filename($name) . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
-            } else {
-                $correctFilename = sanitize_filename(basename($filename));
-            }
-        }
-        if (!move_uploaded_file($file['tmp_name'], $folder . DS. $correctFilename)) {
-            throw new Exception("file_upload_error", 1);
-        }
-        return $correctFilename;
+    if (!$file) {
+        return '';
     }
+
+    $filename = $name ?: $file['name'];
+    if (!$file["tmp_name"] || !$file["type"]) {
+        throw new Exception("bad_file", 1);
+    }
+    $basename = basename($filename);
+    $extension = pathinfo($basename, PATHINFO_EXTENSION);
+    $name = pathinfo($basename, PATHINFO_FILENAME);
+    if ($overwrite) {
+        $correctFilename = $filename;
+    } else {
+        $correctFilename = "";
+        if (file_exists($folder . DS . $basename)) {
+            $correctFilename = sanitize_filename($name) . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+        } else {
+            $correctFilename = sanitize_filename(basename($filename));
+        }
+    }
+    if (!move_uploaded_file($file['tmp_name'], $folder . DS . $correctFilename)) {
+        throw new Exception("file_upload_error", 1);
+    }
+    return $correctFilename;
+
 }
 
 /**
@@ -303,7 +290,7 @@ function save_file($file, $name = null, $folder = VAR_FOLDER, $overwrite = false
  * @param  string $newname desired name
  * @return string          saved filename or input if no file was found
  */
-function update_filename($file = null, $newname = null)
+function update_filename(?string $file, ?string $newname): string
 {
     if (!$file || !$newname) {
         return $file;
@@ -353,12 +340,61 @@ function array_to_file(array $data, $file = DEFAULT_METAFILE)
     }
 }
 
+
+function get_secret_from_file($file = DEFAULT_CONFIGFILE)
+{
+    $data = textFileToArray($file);
+    if (array_key_exists('SECRET', $data)) {
+        return $data['SECRET'];
+    }
+    return '';
+}
+
+function get_host()
+{
+    $possibleHostSources = array('HTTP_X_FORWARDED_HOST', 'HTTP_HOST', 'SERVER_NAME', 'SERVER_ADDR');
+    $sourceTransformations = array(
+        "HTTP_X_FORWARDED_HOST" => function ($value) {
+            $elements = explode(',', $value);
+            return trim(end($elements));
+        }
+    );
+    $host = '';
+    foreach ($possibleHostSources as $source) {
+        if (!empty($host)) {
+            break;
+        }
+        if (empty($_SERVER[$source])) {
+            continue;
+        }
+        $host = $_SERVER[$source];
+        if (array_key_exists($source, $sourceTransformations)) {
+            $host = $sourceTransformations[$source]($host);
+        }
+    }
+
+    // Remove port number from host
+    $host = preg_replace('/:\d+$/', '', $host);
+
+    return trim($host);
+}
+
+function get_header_auth_token()
+{
+    if (array_key_exists('HTTP_AUTHORIZATION', $_SERVER)) {
+        $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
+        $arr = explode(" ", $authHeader);
+        return count($arr) >= 2 ? $arr[1] : '';
+    }
+    return '';
+}
+
 /**
  * Returns array of credentials from two lined text file
  * @param  string $file filename
  * @return array       containing email and password
  */
-function get_credentials_from_file($file = VAR_FOLDER . DS . '.account')
+function get_credentials_from_file($file = DEFAULT_ACCOUNTFILE): array
 {
     $credentials = array(
         'email' => null,
@@ -384,7 +420,7 @@ function check_credentials(string $email, string $password)
         return false;
     }
     $credentials = get_credentials_from_file();
-    return password_verify(sanitize_email($email), $credentials['email']) && password_verify(sanitize_password($password), $credentials['password']);
+    return password_verify(sanitize_email($email), $credentials['email']) && password_verify($password, $credentials['password']);
 }
 
 /**
@@ -394,18 +430,18 @@ function check_credentials(string $email, string $password)
  */
 function check_password($password)
 {
-    if (strlen($password) < 8) {
+    if (mb_strlen($password) < 8) {
         throw new Exception("password_short.", 1);
-        return false;
     }
-    if (!preg_match("/[0-9]{1,}/", $password) || !preg_match("/[A-Z]{1,}/", $password)) {
+
+    if (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^a-zA-Z0-9]).{8,}$/', $password)) {
         throw new Exception("password_bad", 1);
-        return false;
     }
+
     return true;
 }
 
-function get_token($form_name, $filename = '.token')
+function get_token(string $form_name, string $filename = '.token'): string
 {
     $file = VAR_FOLDER . DS . $filename;
     if (file_exists($file)) {
@@ -414,18 +450,16 @@ function get_token($form_name, $filename = '.token')
             return hash('sha512', $lines[0] . session_id() . $form_name);
         }
     }
-    return false;
+
+    return '';
 }
 
 /**
  * Compares provided token with token on file
- * @param  string $token
- * @param  string $form_name
- * @return boolean
  */
-function check_token($token, $form_name)
+function check_token(?string $token, ?string $form_name): bool
 {
-    if (is_bool($token)) {
+    if (!$token) {
         return false;
     }
     return $token === get_token($form_name);
@@ -433,11 +467,8 @@ function check_token($token, $form_name)
 
 /**
  * Generate token and save it on file
- * @param  string $filename
- * @return void
- * @throws Exception
  */
-function create_token($filename = '.token')
+function create_token(string $filename = '.token'): bool
 {
     try {
         $dir = VAR_FOLDER . DS;
@@ -447,43 +478,39 @@ function create_token($filename = '.token')
         $file = fopen($dir . DS . $filename, "w");
         fwrite($file, bin2hex(random_bytes(32)) . "\n");
         fclose($file);
+        return true;
     } catch (Exception $e) {
         throw new Exception($e->getMessage(), $e->getCode());
     }
+    return false;
 }
 
 /**
  * Parses sessions file content
- * @param  mixed $content json string, anything would return an empty array
- * @return array
  */
-function parse_sessions($content)
+function parse_sessions(string $content): array
 {
-    if (!$content || !is_string($content)) {
-        return [];
-    }
-    $json = json_decode($content);
-    if ($json && count($json)) {
-        return $json;
+    try {
+        $json = json_decode($content);
+        if ($json && count($json)) {
+            return $json;
+        }
+    } catch (\Exception $e) {
+        throw $e;
     }
     return [];
 }
 
 /**
  * Invalidates session on file
- * @param  mixed $id  session id
- * @param  mixed $key session id key
- * @return void
  */
-function invalidate_session($id, $key)
+function invalidate_session(string $id, string $key, string $dir = VAR_FOLDER, string $filename = DEFAULT_SESSIONSFILE): bool
 {
     session_destroy();
-    $dir = VAR_FOLDER;
-    $filename = DEFAULT_SESSIONSFILE;
     if (!file_exists($dir)) {
         return false;
     }
-    $sessions = array();
+    $sessions = [];
     if (file_exists($filename)) {
         $content = file_get_contents($filename);
         $sessions = parse_sessions($content);
@@ -497,21 +524,18 @@ function invalidate_session($id, $key)
             }
         }
         $file = fopen($filename, "w");
-        fwrite($file, json_encode($sessions). "\n");
+        fwrite($file, json_encode($sessions) . "\n");
         fclose($file);
     }
+
+    return true;
 }
 
 /**
  * Validates session on file
- * @param  mixed $id  session id
- * @param  mixed $key session key
- * @return boolean
  */
-function validate_session($id, $key)
+function validate_session(string $id, string $key, string $dir = VAR_FOLDER, string $filename = DEFAULT_SESSIONSFILE, $session_max_duration = SESSION_MAXDURATION): bool
 {
-    $dir = VAR_FOLDER;
-    $filename = DEFAULT_SESSIONSFILE;
     if (!file_exists($dir)) {
         return false;
     }
@@ -519,12 +543,52 @@ function validate_session($id, $key)
         $content = file_get_contents($filename);
         $sessions = parse_sessions($content);
         if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1) {
-            if (((int)(new \DateTime())->getTimestamp() - (int)$sessions[$index]->time) / (60 * 60) < SESSION_MAXDURATION) {
+            if (((int) (new \DateTime())->getTimestamp() - (int) $sessions[$index]->time) / (60 * 60) < $session_max_duration) {
                 return true;
             }
         }
     }
     return false;
+}
+
+function issue_token($audience = '', $issuer = '', $data = [], $secret = '', $expiry = 30)
+{
+    $issuance = time(); // issued at
+    $notbefore = $issuance; //not before in seconds
+    $expiry = $issuance + 60; // expire time in seconds
+    $payload = array(
+        "iss" => $issuer,
+        "aud" => $audience,
+        "iat" => $issuance,
+        "nbf" => $notbefore,
+        "exp" => $expiry,
+        "data" => $data
+    );
+    return JWT::encode($payload, $secret);
+}
+
+function refresh_token(string $token, $refresh_token)
+{
+    try {
+        $refresh_token = JWT::decode($refresh_token, get_secret_from_file(), array('HS256'));
+        if ($refresh_token) {
+            \Firebase\JWT\JWT::$timestamp = 0;
+            $decoded = JWT::decode($accessToken);
+            return issue_token($decoded['aud'], $decoded['iss'], $decoded["ata"], get_secret_from_file(), 60);
+        }
+    } catch (Exception $e) {
+        throw $e;
+    }
+}
+
+function validate_token($token)
+{
+    try {
+        JWT::decode($token, get_secret_from_file(), array('HS256'));
+        return true;
+    } catch (Exception $e) {
+        throw $e;
+    }
 }
 
 /**
@@ -563,7 +627,7 @@ function add_session($id, $key)
         if (!file_exists($dir)) {
             mkdir($dir, 0755, true);
         }
-        $sessions = array();
+        $sessions = [];
         $account = null;
         // if file exists, try to update the entry
         if (file_exists($filename)) {
@@ -581,7 +645,7 @@ function add_session($id, $key)
             );
         }
         $file = fopen($filename, "w");
-        fwrite($file, json_encode($sessions). "\n");
+        fwrite($file, json_encode($sessions) . "\n");
         fclose($file);
         return true;
     } catch (Exception $e) {
@@ -597,7 +661,7 @@ function clean_installation()
 {
     $files = glob(VAR_FOLDER . DS . '*');
     foreach ($files as $file) {
-        if (is_file($file) && $file !== DEFAULT_ACCOUNTFILE && $FILE !== DEFAULT_METAFILE) {
+        if (is_file($file) && $file !== DEFAULT_ACCOUNTFILE && $file !== DEFAULT_METAFILE) {
             unlink($file);
         }
     }
@@ -611,7 +675,7 @@ function clean_installation()
 function uninstall(bool $deleteimages = false)
 {
     $meta = file_exists(DEFAULT_METAFILE) ? textFileToArray(DEFAULT_METAFILE) : null;
-    $files = glob(VAR_FOLDER . DS . '{,.}[!.,!..]*', GLOB_MARK|GLOB_BRACE);
+    $files = glob(VAR_FOLDER . DS . '{,.}[!.,!..]*', GLOB_MARK | GLOB_BRACE);
     foreach ($files as $file) {
         unlink($file);
     }
@@ -619,7 +683,7 @@ function uninstall(bool $deleteimages = false)
     if (true === $deleteimages) {
         $imagesdir = $meta && count($meta) && array_key_exists('imagesfolder', $meta) ? ROOT_FOLDER . DS . $meta['imagesfolder'] : DEFAULT_IMAGEFOLDER;
 
-        $files = glob($imagesdir . DS . '{,.}[!.,!..]*', GLOB_MARK|GLOB_BRACE);
+        $files = glob($imagesdir . DS . '{,.}[!.,!..]*', GLOB_MARK | GLOB_BRACE);
         foreach ($files as $file) {
             unlink($file);
         }
@@ -637,7 +701,7 @@ function uninstall(bool $deleteimages = false)
  */
 function put_error(string $message)
 {
-    echo "<aside class=\"notice error\">${message}</aside>";
+    echo "<aside class=\"notice error\">$message</aside>";
 }
 
 /**
@@ -647,16 +711,14 @@ function put_error(string $message)
  */
 function put_success(string $message)
 {
-    echo "<aside class=\"notice success\">${message}</aside>";
+    echo "<aside class=\"notice success\">$message</aside>";
 }
 
 /**
  * Applies sanitization rules to filename string
- * @param  string|null $str
- * @param  string      $replace
  * @return string
  */
-function sanitize_filename(string $str = null, string $replace = '-')
+function sanitize_filename(?string $str = null, ?string $replace = '-'): string
 {
     if (!$str) {
         return bin2hex(random_bytes(4));
@@ -670,10 +732,8 @@ function sanitize_filename(string $str = null, string $replace = '-')
 
 /**
  * Apply sanitization rules to email string
- * @param  string $text
- * @return string
  */
-function sanitize_email(string $text = '')
+function sanitize_email(string $text): string
 {
     return filter_var(strtolower(trim($text)), FILTER_SANITIZE_EMAIL);
 }
@@ -683,9 +743,9 @@ function sanitize_email(string $text = '')
  * @param  string $text
  * @return string
  */
-function sanitize_password(string $text = '')
+function sanitize_password(?string $text)
 {
-    return filter_var($text, FILTER_SANITIZE_STRING);
+    return $text;
 }
 
 /**
@@ -695,7 +755,7 @@ function sanitize_password(string $text = '')
  */
 function sanitize_text(string $text = '')
 {
-    return filter_var(trim($text), FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    return htmlspecialchars($text);
 }
 
 /**
@@ -733,12 +793,13 @@ function is_installed()
  */
 function translate($string, $extra = "", $language = '')
 {
-    $translation = loadTranslation(!$language ? substr($_SERVER['HTTP_ACCEPT_LANGUAGE'], 0, 2) : $language);
+    $httpLang = array_key_exists('HTTP_ACCEPT_LANGUAGE', $_SERVER) ? mb_substr($_SERVER['HTTP_ACCEPT_LANGUAGE'], 0, 2) : null;
+    $translation = loadTranslation(!$language ? $httpLang : $language);
     if ($translation && count($translation)) {
         $translated = '';
         if (array_key_exists($string, $translation)) {
             $translated = $translation[$string];
-            $translated .= strlen($extra) ? "<br/>" . $extra : "";
+            $translated .= mb_strlen($extra) ? "<br/>" . $extra : "";
         } else {
             return $translated = $language != "en" ? translate($string, $extra, 'en') : '';
         }
@@ -755,12 +816,14 @@ function translate($string, $extra = "", $language = '')
  */
 function loadTranslation($language = 'en')
 {
-    $content = json_decode(file_get_contents(TRANSLATIONS_FOLDER . DS . $language . '.json'), true);
-    if ($content && count($content)) {
-        return $content;
-    } else {
-        return $language == 'en' ? array() : loadTranslation('en');
+    $fileContent = @file_get_contents(TRANSLATIONS_FOLDER . DS . $language . '.json');
+    if ($fileContent) {
+        $content = json_decode($fileContent, true);
+        if ($content && count($content)) {
+            return $content;
+        }
     }
+    return $language == 'en' ? [] : loadTranslation('en');
 }
 
 /**
@@ -781,7 +844,7 @@ function url(string $path = '')
     $disp_port = ($protocol == 'http' && $port == 80 || $protocol == 'https' && $port == 443) ? '' : ":$port";
 
     // put em all together to get the complete base URL
-    return "${protocol}://${domain}${disp_port}" . (!ROOT_URL ? '' : DS . ROOT_URL) . ($path && $path[0] !== '/' ? '/' : '') . ($path ? htmlspecialchars($path) : '');
+    return "$protocol://$domain$disp_port" . (!ROOT_URL ? '' : DS . ROOT_URL) . ($path && $path[0] !== '/' ? '/' : '') . ($path ? htmlspecialchars($path) : '');
 }
 
 /**
@@ -791,14 +854,14 @@ function url(string $path = '')
  * @param  mixed  $data     content
  * @return void
  */
-function json_response($message = 'Error', $code = 500, $data = null)
+function json_response($message = 'Error', $code = 500, mixed $data = null)
 {
     header('Content-Type: application/json');
-    $response = array(
+    $response = [
         'code' => $code,
         'data' => $data,
         'message' => $message
-    );
+    ];
     http_response_code($code);
     echo json_encode($response);
 }

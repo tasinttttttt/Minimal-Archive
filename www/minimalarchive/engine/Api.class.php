@@ -1,58 +1,45 @@
 <?php
+
 class Api
 {
-    const ERROR_NO_IMAGE_FOLDER = 'no_image_folder';
-
-    private $imageFolder;
-    private $metaFile;
-    private $rootFolder;
+    private const string ERROR_NO_IMAGE_FOLDER = 'no_image_folder';
 
     public function __construct(
-        string $imageFolder = DEFAULT_IMAGEFOLDER,
-        string $metaFile = DEFAULT_METAFILE,
-        string $rootFolder = ROOT_FOLDER
+        private string $imageFolder = DEFAULT_IMAGEFOLDER,
+        private string $metaFile = DEFAULT_METAFILE
     ) {
-        $this->imageFolder = $imageFolder;
-        $this->metaFile = $metaFile;
-        $this->rootFolder = $rootFolder;
     }
 
     /**
      * Upload operation handle
-     * @param  array  $files
-     * @return void
      */
-    public function upload(array $files = [])
+    public function upload(array $files = []): void
     {
         try {
             $meta = textFileToArray($this->metaFile);
             $imagesdir = $this->imageFolder;
             if (!$imagesdir) {
-                throw new Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
+                throw new \Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
             }
-            $data = array();
+            $data = [];
             foreach ($files as $file) {
                 $filename = save_file($file, $file['name'], $this->imageFolder);
-                $data[] = array(
-              'name' => $filename,
-              'type' => $file['type'],
-              'extension' => pathinfo($file['name'], PATHINFO_EXTENSION)
-          );
+                $data[] = [
+                    'name' => $filename,
+                    'type' => $file['type'],
+                    'extension' => pathinfo($file['name'], PATHINFO_EXTENSION)
+                ];
             }
             json_response('ok', 200, $data);
-            return;
-        } catch (Exception $e) {
+        } catch (\Exception $e) {
             json_response($e->getMessage(), 400);
-            return;
         }
     }
 
     /**
      * Save data to files
-     * @param  array|null $data
-     * @return void
      */
-    public function save(array $data = null)
+    public function save(?array $data): void
     {
         if (!$data || !count($data)) {
             json_response('Bad query', 400);
@@ -78,19 +65,41 @@ class Api
                 $result['images'] = $this->update_filenames($data['images']);
             }
             json_response('ok', 200, $result);
+        } catch (\Exception $e) {
+            json_response($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Creates a new account
+     * @param  string $identifier
+     * @param  string $password
+     * @return void
+     */
+    public function registerUser(string $identifier, string $password): void
+    {
+        if (!$identifier || !$password) {
+            json_response('Bad query', 400);
             return;
-        } catch (Exception $e) {
+        }
+        try {
+            $result = [];
+            if (create_accountfile($identifier, $password)) {
+                $result['identifier'] = $identifier;
+            }
+            json_response('ok', 200, $result);
+        } catch (\Exception $e) {
             json_response($e->getMessage(), 500);
         }
     }
 
     /**
      * Delete all files except provided list
-     * @param  array|null $data exceptions
+     * @param  array|null $data \exceptions
      * @return array deleted images filenames list
-     * @throws Exception
+     * @throws \Exception
      */
-    private function delete_all_files_except(array $data = null)
+    private function delete_all_files_except(?array $data): array
     {
         try {
             $meta = textFileToArray($this->metaFile);
@@ -98,8 +107,7 @@ class Api
                 return array();
             }
             if (!$this->imageFolder) {
-                throw new Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
-                return;
+                throw new \Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
             }
             $images = getImagesInFolder($this->imageFolder);
             $result = array();
@@ -111,17 +119,15 @@ class Api
                 }
             }
             return $result;
-        } catch (Exception $e) {
-            throw new Exception($e->getMessage(), $e->getCode());
+        } catch (\Exception $e) {
+            throw new \Exception($e->getMessage(), $e->getCode());
         }
     }
 
     /**
      * Update filenames for given images list
-     * @param  array|null $images
-     * @return array modified images filenames list
      */
-    private function update_filenames(array $images = null)
+    private function update_filenames(?array $images): array
     {
         try {
             $meta = textFileToArray($this->metaFile);
@@ -129,8 +135,7 @@ class Api
                 return array();
             }
             if (!$this->imageFolder) {
-                throw new Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
-                return;
+                throw new \Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
             }
             $existingImages = getImagesInFolder($this->imageFolder);
             $result = array();
@@ -146,8 +151,8 @@ class Api
                 }
             }
             return $result;
-        } catch (Exception $e) {
-            throw new Exception($e->getMessage(), $e->getCode());
+        } catch (\Exception $e) {
+            throw $e;
         }
     }
 }

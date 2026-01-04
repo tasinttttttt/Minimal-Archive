@@ -94,7 +94,7 @@ export const baseUrl = (segment = '') => {
  *   newRequest -> takes a url with data, credentials and headers and executes request
  */
 export class Fetch {
-  newRequest (url, request, credentials = 'same-origin', headers = { 'Content-Type': 'application/x-www-form-urlencoded' }) {
+  newRequest (url, request, credentials = 'same-origin', headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' }) {
     function processResponse (response) {
       return new Promise((resolve, reject) => {
         // will resolve or reject depending on status, will pass both "status" and "data" in either case
