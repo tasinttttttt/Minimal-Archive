@@ -97,7 +97,7 @@ unset($_POST);
 
 <?php
 if ($access_granted):
-    ?>
+?>
     <?php
     $meta = textFileToArray(ROOT_FOLDER . DS . 'meta.txt');
     $imagesdir = array_key_exists('imagesfolder', $meta) ? $meta['imagesfolder'] : null;
@@ -124,6 +124,7 @@ if ($access_granted):
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
         <title>Edit - <?= $title; ?></title>
+        <meta name="color-scheme" content="light only">
         <meta name="robots" content="noindex, nofollow">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="icon" type="image/png" href="<?= url($favicon) ?>" />
@@ -149,7 +150,7 @@ if ($access_granted):
         if ($error && strlen($error)) {
             put_error($error);
         } else {
-            ?>
+        ?>
 
             <div id="drop-area">
                 <span class="drop-message"><?= translate('edit_dragzone') ?></span>
@@ -322,7 +323,7 @@ if ($access_granted):
                     </section>
                 </footer>
             </main>
-            <?php
+        <?php
         }
         ?>
         <script src="<?= url('assets/js/edit.js') ?>"></script>
