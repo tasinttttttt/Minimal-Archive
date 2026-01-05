@@ -283,7 +283,6 @@ function save_file(array $file, ?string $name, string $folder = VAR_FOLDER, bool
         throw new Exception("file_upload_error", 1);
     }
     return $correctFilename;
-
 }
 
 /**
@@ -366,7 +365,7 @@ function get_host()
         if (!empty($host)) {
             break;
         }
-        if (empty($_SERVER[$source])) {
+        if (!isset($_SERVER[$source]) || empty($_SERVER[$source])) {
             continue;
         }
         $host = $_SERVER[$source];
@@ -671,38 +670,70 @@ function uninstall(bool $deleteimages = false)
 
 /**
  * Output a stylized error html
- * @param  string $message
- * @return void
  */
 function put_error(string $message)
 {
-    echo "<aside class=\"notice error\">$message</aside>";
+    echo "<aside class=\"notice error\">" . htmlspecialchars($message) . "</aside>";
 }
 
 /**
  * Output a stylized success html
- * @param  string $message
- * @return void
  */
-function put_success(string $message)
+function put_success(string $message): void
 {
-    echo "<aside class=\"notice success\">$message</aside>";
+    echo "<aside class=\"notice success\">" . htmlspecialchars($message) . "</aside>";
 }
 
 /**
  * Applies sanitization rules to filename string
- * @return string
  */
-function sanitize_filename(?string $str = null, ?string $replace = '-'): string
+function sanitize_filename(?string $filename = null, ?string $replace = '-'): string
 {
-    if (!$str) {
+    if (!$filename) {
         return bin2hex(random_bytes(4));
     }
-    // Remove unwanted chars
-    $str = mb_ereg_replace("([^\w\s\d\-_~,;\[\]\(\).])", $replace, $str);
-    // Replace multiple dots by custom char
-    $str = mb_ereg_replace("([\.]{2,})", $replace, $str);
-    return $str;
+
+    // Remove control characters and null bytes
+    $filename = preg_replace('/[\x00-\x1f\x7f]/u', '', $filename);
+
+    // Replace sequences of reserved characters and shell metacharacters with a single hyphen
+    $filename = preg_replace('/[<>:"\/\\\\|?*&$#()\[\]{}\'!~;]+/', '-', $filename);
+
+    // Remove leading/trailing periods, spaces, and hyphens
+    $filename = trim($filename, ' .-');
+
+    // Handle Windows reserved device names
+    $reserved_names = [
+        'CON',
+        'PRN',
+        'AUX',
+        'NUL',
+        'COM1',
+        'COM2',
+        'COM3',
+        'COM4',
+        'COM5',
+        'COM6',
+        'COM7',
+        'COM8',
+        'COM9',
+        'LPT1',
+        'LPT2',
+        'LPT3',
+        'LPT4',
+        'LPT5',
+        'LPT6',
+        'LPT7',
+        'LPT8',
+        'LPT9'
+    ];
+
+    if (in_array(strtoupper($filename), $reserved_names)) {
+        $filename = '_' . $filename;
+    }
+
+    // Limit filename to 255 characters
+    return substr($filename, 0, 255);
 }
 
 /**
@@ -715,47 +746,40 @@ function sanitize_email(string $text): string
 
 /**
  * Apply sanitization rules to password string
- * @param  string $text
- * @return string
  */
-function sanitize_password(?string $text)
+function sanitize_password(?string $text): string
 {
     return $text;
 }
 
 /**
  * Apply sanitization rules to text string
- * @param  string $text
- * @return string
  */
-function sanitize_text(string $text = '')
+function sanitize_text(?string $text = ''): string
 {
     return htmlspecialchars($text);
 }
 
 /**
  * Test if default account file exists
- * @return boolean
  */
-function has_account()
+function has_account(): bool
 {
     return file_exists(DEFAULT_ACCOUNTFILE);
 }
 
 /**
  * Test if default metafile file exists and contains data
- * @return boolean
  */
-function has_meta()
+function has_meta(): bool
 {
     return file_exists(DEFAULT_METAFILE) && ($meta = textFileToArray(DEFAULT_METAFILE)) && count($meta);
 }
 
 /**
  * Test if installation files exist
- * @return boolean
  */
-function is_installed()
+function is_installed(): bool
 {
     return has_account() && has_meta();
 }
@@ -766,7 +790,7 @@ function is_installed()
  * @param  string $extra    extra content to append to translation
  * @return string
  */
-function translate($string, $extra = "", $language = '')
+function translate(?string $string, ?string $extra = "", ?string $language = ''): string
 {
     $httpLang = array_key_exists('HTTP_ACCEPT_LANGUAGE', $_SERVER) ? mb_substr($_SERVER['HTTP_ACCEPT_LANGUAGE'], 0, 2) : null;
     $translation = loadTranslation(!$language ? $httpLang : $language);
@@ -789,7 +813,7 @@ function translate($string, $extra = "", $language = '')
  * @param  string $language
  * @return array
  */
-function loadTranslation($language = 'en')
+function loadTranslation(?string $language = 'en'): array
 {
     $fileContent = @file_get_contents(TRANSLATIONS_FOLDER . DS . $language . '.json');
     if ($fileContent) {
@@ -806,20 +830,23 @@ function loadTranslation($language = 'en')
  * @param  string $path
  * @return string
  */
-function url(string $path = '')
+function url(?string $path = ''): string
 {
     // server protocol
-    $protocol = empty($_SERVER['HTTPS']) ? 'http' : 'https';
+    $protocol = !isset($_SERVER['HTTPS']) ? 'http' : 'https';
 
     // domain name
-    $domain = $_SERVER['SERVER_NAME'];
+    $domain = $_SERVER['SERVER_NAME'] ?? 'localhost';
 
     // server port
-    $port = $_SERVER['SERVER_PORT'];
+    $port = $_SERVER['SERVER_PORT'] ?? 80;
     $disp_port = ($protocol == 'http' && $port == 80 || $protocol == 'https' && $port == 443) ? '' : ":$port";
 
+    $host = "$protocol://$domain$disp_port";
+    $root = !ROOT_URL ? '' : DS . ROOT_URL;
+    $path = ($path && $path[0] !== '/' ? '/' : '') . ($path ? htmlspecialchars($path) : '');
     // put em all together to get the complete base URL
-    return "$protocol://$domain$disp_port" . (!ROOT_URL ? '' : DS . ROOT_URL) . ($path && $path[0] !== '/' ? '/' : '') . ($path ? htmlspecialchars($path) : '');
+    return "$host$root$path";
 }
 
 /**
@@ -829,7 +856,7 @@ function url(string $path = '')
  * @param  mixed  $data     content
  * @return void
  */
-function json_response($message = 'Error', $code = 500, mixed $data = null)
+function json_response(?string $message = 'Error', ?int $code = 500, mixed $data = null): void
 {
     header('Content-Type: application/json');
     $response = [

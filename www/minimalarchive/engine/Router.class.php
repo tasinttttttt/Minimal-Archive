@@ -15,6 +15,9 @@ class Router
     public function start()
     {
         // Grabs the URI and breaks it apart in case we have querystring stuff
+        if (!isset($_SERVER['REQUEST_URI'])) {
+            $_SERVER['REQUEST_URI'] = '/';
+        }
         $request_uri = explode('?', trim($_SERVER['REQUEST_URI'], '/'), 2);
         $base = $request_uri[0];
         if ($this->rootUrl) {

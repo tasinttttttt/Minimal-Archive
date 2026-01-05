@@ -9,6 +9,7 @@ php-error.log*
 *.sublime-project
 *.sublime-workspace
 stats.json
+.phpunit
 
 ### Node ###
 .tmp
@@ -69,6 +70,13 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# phpunit
+.phpunit.result.cache
+.phpunit.cache
+/www/minimalarchive/phpunit.xml
+/www/minimalarchive/phpunit.xml
+/www/minimalarchive/build/
 
 www/minimalarchive/var/*
 www/assets/images/*
