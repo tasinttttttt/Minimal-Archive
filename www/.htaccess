@@ -4,7 +4,6 @@ Options All -Indexes
 # rewrite rules
 <IfModule mod_rewrite.c>
 
-# If in subfolder
 RewriteEngine on
 
 # HTTPS
@@ -84,22 +83,24 @@ RewriteRule ^(.*) index.php [L]
 
 #DISABLE CACHING
 <IfModule mod_headers.c>
-  Header set Cache-Control "no-cache, no-store, must-revalidate"
-  Header set Pragma "no-cache"
-  Header set Expires 0
-  Header set Accept-Ranges "bytes"
+  # Header set Cache-Control "no-cache, no-store, must-revalidate"
+  # Header set Pragma "no-cache"
+  # Header set Expires 0
+  # Header set Accept-Ranges "bytes"
 </IfModule>
 
 #ENABLE CACHING
 <IfModule mod_expires.c>
-  #  ExpiresActive On
-  #  ExpiresDefault "access plus 10 days"
-  #  ExpiresByType text/css "access plus 1 week"
-  #  ExpiresByType text/plain "access plus 1 month"
-  #  ExpiresByType image/gif "access plus 1 month"
-  #  ExpiresByType image/png "access plus 1 month"
-  #  ExpiresByType image/jpeg "access plus 1 month"
-  #  ExpiresByType image/svg+xml "access plus 1 month"
-  #  ExpiresByType application/javascript "access plus 1 week"
-  #  ExpiresByType application/x-icon "access plus 1 year"
+  ExpiresActive On
+  ExpiresDefault "access plus 10 days"
+  ExpiresByType text/css "access plus 1 week"
+  ExpiresByType text/plain "access plus 1 week"
+  ExpiresByType image/gif "access plus 6 month"
+  ExpiresByType image/png "access plus 6 month"
+  ExpiresByType image/jpeg "access plus 6 month"
+  ExpiresByType image/webp "access plus 6 month"
+  ExpiresByType image/avif "access plus 6 month"
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 week"
+  ExpiresByType application/x-icon "access plus 1 year"
 </IfModule>
