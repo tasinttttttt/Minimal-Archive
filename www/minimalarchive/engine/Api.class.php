@@ -2,7 +2,7 @@
 
 class Api
 {
-    private const string ERROR_NO_IMAGE_FOLDER = 'no_image_folder';
+    private const ERROR_NO_IMAGE_FOLDER = 'no_image_folder';
 
     public function __construct(
         private string $imageFolder = DEFAULT_IMAGEFOLDER,
@@ -16,7 +16,6 @@ class Api
     public function upload(array $files = []): void
     {
         try {
-            $meta = textFileToArray($this->metaFile);
             $imagesdir = $this->imageFolder;
             if (!$imagesdir) {
                 throw new \Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
@@ -47,7 +46,7 @@ class Api
         }
         try {
             $meta = textFileToArray($this->metaFile);
-            $result = array();
+            $result = [];
             foreach ($data as $key => $value) {
                 if ($key !== 'images' && !is_array($value)) {
                     if (array_key_exists($key, $meta)) {
@@ -102,20 +101,19 @@ class Api
     private function delete_all_files_except(?array $data): array
     {
         try {
-            $meta = textFileToArray($this->metaFile);
-            if (!$data || !count($data)) {
-                return array();
-            }
             if (!$this->imageFolder) {
                 throw new \Exception(self::ERROR_NO_IMAGE_FOLDER, 1);
             }
             $images = getImagesInFolder($this->imageFolder);
-            $result = array();
+            $result = [];
             foreach ($images as $image) {
                 if (!array_key_exists_in_array_of_arrays($image, 'filename', $data)) {
                     @unlink($this->imageFolder . DS . $image);
                 } else {
-                    $result[] = array('src' => url(str_replace(ROOT_FOLDER, '', $this->imageFolder) . DS . $image), 'filename' => $image);
+                    $result[] = [
+                        'src' => url(str_replace(ROOT_FOLDER, '', $this->imageFolder) . DS . $image),
+                        'filename' => $image
+                    ];
                 }
             }
             return $result;

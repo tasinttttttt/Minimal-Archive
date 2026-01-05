@@ -13,53 +13,46 @@ const getCsrfToken = (domNode) => {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const bgColorBtnSelector = document.querySelector('#bg_color')
-  const textColorBtnSelector = document.querySelector('#text_color')
-  const fontfamilyBtnSelector = document.querySelector('#font_family')
-  const saveBtnSelector = document.querySelector('.editbutton.save')
-  const cancelBtnSelector = document.querySelector('.editbutton.cancel')
-  const previewBtnSelector = document.querySelector('.editbutton.preview')
-
-  ;(() => new Loader())()
+  ; (() => new Loader())()
   const editor = new Editor({
-    bgColor: bgColorBtnSelector.value,
-    textColor: textColorBtnSelector.value,
+    bgColor: bg_color.value,
+    textColor: text_color.value,
     onUpdate: (newState, oldState) => {
-      bgColorBtnSelector.value = newState.bgcolor
-      bgColorBtnSelector.nextSibling.innerHTML = newState.bgcolor
-      textColorBtnSelector.value = newState.textcolor
-      textColorBtnSelector.nextSibling.innerHTML = newState.textcolor
+      bg_color.value = newState.bgcolor
+      bg_color.nextSibling.innerHTML = newState.bgcolor
+      text_color.value = newState.textcolor
+      text_color.nextSibling.innerHTML = newState.textcolor
     }
   })
 
   // Save button
   editor.addButton({
-    domNode: saveBtnSelector,
+    domNode: savebtn,
     callback: () => {
-      editor.actionSave(getCsrfToken(saveBtnSelector))
+      editor.actionSave(getCsrfToken(savebtn))
     },
-    csrf_token: getCsrfToken(saveBtnSelector)
+    csrf_token: getCsrfToken(savebtn)
   })
 
   // Cancel button
   editor.addButton({
-    domNode: cancelBtnSelector,
+    domNode: cancelbtn,
     callback: () => {
-      editor.actionCancel(getCsrfToken(cancelBtnSelector))
+      editor.actionCancel(getCsrfToken(cancelbtn))
     },
-    csrf_token: getCsrfToken(cancelBtnSelector)
+    csrf_token: getCsrfToken(cancelbtn)
   })
 
   // Preview button
   editor.addButton({
-    domNode: previewBtnSelector,
+    domNode: previewbtn,
     callback: () => { window.location = baseUrl() },
-    csrf_token: getCsrfToken(previewBtnSelector)
+    csrf_token: getCsrfToken(previewbtn)
   })
 
   // Background color selector
   editor.addButton({
-    domNode: bgColorBtnSelector,
+    domNode: bg_color,
     type: 'input',
     callback: (e) => {
       editor.bgColor = e.target.value
@@ -69,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Text color selector
   editor.addButton({
-    domNode: textColorBtnSelector,
+    domNode: text_color,
     type: 'input',
     callback: (e) => {
       editor.textColor = e.target.value
@@ -79,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Font family selector
   editor.addButton({
-    domNode: fontfamilyBtnSelector,
+    domNode: font_family,
     type: 'input',
     callback: (e) => {
       editor.fontFamily = e.target.value

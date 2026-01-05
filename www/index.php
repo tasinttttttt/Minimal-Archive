@@ -12,7 +12,7 @@ function getIp()
     return $ip;
 }
 
-$extensions = array("bmp", "webp", "jpg", "jpeg", "png", "gif", "css", "js", "sqlite", "eot", "svg", "ttf", "woff", "woff2");
+$extensions = array("bmp", "webp", "jpg", "jpeg", "png", "gif", "css", "js", "sqlite", "eot", "svg", "ttf", "woff", "woff2", "avif");
 
 $path = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);
 $ext = pathinfo($path, PATHINFO_EXTENSION);

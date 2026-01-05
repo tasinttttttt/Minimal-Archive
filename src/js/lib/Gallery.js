@@ -16,7 +16,7 @@ import {
 } from './Helpers.js'
 
 class Gallery {
-  constructor (options) {
+  constructor(options) {
     const defaults = {
       gallerySelector: '.Gallery',
       imageSelector: '.Image',
@@ -54,7 +54,7 @@ class Gallery {
     }
   }
 
-  activate (force) {
+  activate(force) {
     if (force || !this._active) {
       this._active = true
       this._gallery.classList.remove('Gallery--inactive')
@@ -63,7 +63,7 @@ class Gallery {
     }
   }
 
-  deactivate (force) {
+  deactivate(force) {
     if (force || this._active) {
       this._active = false
       this._gallery.classList.remove('Gallery--active')
@@ -73,11 +73,11 @@ class Gallery {
     }
   }
 
-  toggleActive () {
+  toggleActive() {
     this._active = !this._active
   }
 
-  getInitializedImages (selector, active) {
+  getInitializedImages(selector, active) {
     const images = document.querySelectorAll(selector)
     const result = []
     let i = -1
@@ -90,31 +90,31 @@ class Gallery {
     return result
   }
 
-  initListeners () {
+  initListeners() {
     document.addEventListener(EVENT_IMAGE_UPDATE, this.updateImage)
     document.addEventListener('keyup', this.keyHandler)
     this.activateImages()
   }
 
-  removeListeners () {
+  removeListeners() {
     document.removeEventListener(EVENT_IMAGE_UPDATE, this.updateImage)
     document.removeEventListener('keyup', this.keyHandler)
     this.deactivateImages()
   }
 
-  activateImages () {
+  activateImages() {
     this._images.map(image => {
       image.activate()
     })
   }
 
-  deactivateImages () {
+  deactivateImages() {
     this._images.map(image => {
       image.deactivate()
     })
   }
 
-  updateImage (e) {
+  updateImage(e) {
     if (e.detail && e.detail.image && e.detail.image instanceof Image) {
       this.updateCurrentImage(e.detail.image)
     } else {
@@ -122,7 +122,7 @@ class Gallery {
     }
   }
 
-  removeImageById (id) {
+  removeImageById(id) {
     let target = null
     this._images = this._images.filter(image => {
       if (image.getId() === id) {
@@ -137,7 +137,7 @@ class Gallery {
     return this._images
   }
 
-  revertRemoveImageById (id) {
+  revertRemoveImageById(id) {
     const match = this._imagesBackup.find(image => image.getId() === id)
     if (match) {
       match.dom.classList.remove('Image--markedfordeletion')
@@ -146,7 +146,7 @@ class Gallery {
     return this._images
   }
 
-  updateCurrentImage (image) {
+  updateCurrentImage(image) {
     if (this._current instanceof Image) {
       this._current.status = false
     }
@@ -159,7 +159,7 @@ class Gallery {
     }
   }
 
-  keyHandler (e) {
+  keyHandler(e) {
     switch (e.key) {
       case 'ArrowLeft':
         if (this._current) {
@@ -179,21 +179,22 @@ class Gallery {
     }
   }
 
-  setImages (images) {
+  setImages(images) {
+    this._gallery.innerHTML = null
+    this.images = []
     if (!images || !images.length) {
       return
     }
-    this._gallery.innerHTML = null
-    this.images = []
-    let i = -1
-    while (++i < images.length) {
-      if ('src' in images[i] && 'filename' in images[i]) {
-        this.addImage(this.getImageDom(images[i].src, images[i].filename))
+
+    const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
+    images.sort((a, b) => collator.compare(a?.filename, b?.filename)).forEach((image, i) => {
+      if ('src' in image && 'filename' in image) {
+        this.addImage(this.getImageDom(image.src, image.filename))
       }
-    }
+    })
   }
 
-  addImage (dom) {
+  addImage(dom) {
     const image = this.getNewImage(dom, this._active)
     if (dom && document.body.contains(dom)) {
       this._images.push(image)
@@ -211,7 +212,7 @@ class Gallery {
     return image
   }
 
-  getNewImage (dom, active) {
+  getNewImage(dom, active) {
     if (!dom || !isDomNode(dom)) {
       return null
     }
@@ -231,7 +232,7 @@ class Gallery {
       })
   }
 
-  getImageDom (src, filename) {
+  getImageDom(src, filename) {
     if (src) {
       return htmlToElement(`<div class="Image">
         <div class="Image__container">
@@ -242,7 +243,7 @@ class Gallery {
     }
   }
 
-  next () {
+  next() {
     const index = this.images.indexOf(this._current)
     if (index >= 0 && index <= this.images.length - 2) {
       this.updateCurrentImage(this.images[index + 1])
@@ -251,7 +252,7 @@ class Gallery {
     }
   }
 
-  prev () {
+  prev() {
     const index = this.images.indexOf(this._current)
     if (index > 0) {
       this.updateCurrentImage(this.images[index - 1])
@@ -260,22 +261,22 @@ class Gallery {
     }
   }
 
-  reset () {
+  reset() {
     document.dispatchEvent(new Event(EVENT_RESET))
   }
 
-  set current (image) {
+  set current(image) {
     this.updateCurrentImage(image)
   }
-  get current () {
+  get current() {
     return this._current
   }
 
-  get images () {
+  get images() {
     return this._images
   }
 
-  set images (images) {
+  set images(images) {
     this._images = images
   }
 }

@@ -28,7 +28,7 @@ A minimal php/javascript tool to display images on a web page.
 
 ```
 Production:
-php >= 7.0
+php >= 8.1
 
 Developpement:
 node
@@ -98,6 +98,10 @@ If you plan to edit the javascript, you may have to compile it. A simple way to 
 # the -w option is for watching changes
 npx rollup ./src/js/index.js --file www/assets/js/index.js --format iife -w
 npx rollup ./src/js/edit.js --file www/assets/js/edit.js --format iife -w
+
+# Reduce filesize a little:
+npx rollup ./src/js/index.js --format iife --file temp.js
+npx uglify-js temp.js -o ./src/js/index.js
 
 # sass files
 # this compiles everything you need

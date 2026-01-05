@@ -70,13 +70,14 @@ unset($_POST);
                         <legend><?= translate('editor_title') ?></legend>
                         <div class="pure-control-group">
                             <label for="email"><?= translate('email_address') ?> *</label>
-                            <input id="email" type="email" placeholder="Email Address" required="true" name="email"
-                                autofocus="true" autocomplete="on">
+                            <input id="email" type="email" placeholder="<?= translate('email_address') ?>" required="true"
+                                name="email" autofocus="true" autocomplete="on">
                         </div>
 
                         <div class="pure-control-group">
                             <label for="password"><?= translate('password') ?> *</label>
-                            <input id="password" type="password" placeholder="Password" required="true" name="password">
+                            <input id="password" type="password" placeholder="<?= translate('password') ?>" required="true"
+                                name="password">
                         </div>
 
                         <input type="hidden" name="csrf_token" value="<?= get_token('edit') ?>" />
@@ -259,7 +260,7 @@ if ($access_granted):
                         <span><?= translate('tip') ?>: </span><?= translate('instructions_add_pic') ?>
                     </div>
                     <div class="controls__footer__buttons">
-                        <div class="editbutton save">
+                        <button id="savebtn" class="editbutton save">
                             <div class="editbutton__icon">
                                 <span class="icon">✍️</span>
                             </div>
@@ -270,9 +271,9 @@ if ($access_granted):
                                 </div>
                             </div>
 
-                        </div>
+                        </button>
 
-                        <div class="editbutton cancel">
+                        <button id="cancelbtn" class="editbutton cancel">
                             <div class="editbutton__icon">
                                 <span class="icon">🙅</span>
                             </div>
@@ -281,9 +282,9 @@ if ($access_granted):
                                     <span><?= translate('cancel') ?></span>
                                 </div>
                             </div>
-                        </div>
+                        </button>
 
-                        <div class="editbutton preview">
+                        <button id="previewbtn" class="editbutton preview">
                             <div class="editbutton__icon">
                                 <span class="icon">🏃</span>
                             </div>
@@ -292,7 +293,7 @@ if ($access_granted):
                                     <span><?= translate('exit') ?></span>
                                 </div>
                             </div>
-                        </div>
+                        </button>
                     </div>
                 </div>
             </aside>

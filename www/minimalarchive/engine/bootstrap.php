@@ -24,7 +24,6 @@ define('SESSION_MAXDURATION', 2);
 
 session_start();
 
-include_once 'vendor/autoload.php';
 include_once 'functions.php';
 include_once 'class_loader.php';
 

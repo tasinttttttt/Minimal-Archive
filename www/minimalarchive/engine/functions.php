@@ -197,7 +197,9 @@ function getImagesInFolder(?string $folder = null)
         'gif',
         'jpg',
         'jpeg',
-        'png'
+        'png',
+        'avif',
+        'webp'
     );
     try {
         return getFilenamesInFolder($folder, $supported_formats);
@@ -543,52 +545,15 @@ function validate_session(string $id, string $key, string $dir = VAR_FOLDER, str
         $content = file_get_contents($filename);
         $sessions = parse_sessions($content);
         if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1) {
+            if (!isset($sessions[$index])) {
+                return false;
+            }
             if (((int) (new \DateTime())->getTimestamp() - (int) $sessions[$index]->time) / (60 * 60) < $session_max_duration) {
                 return true;
             }
         }
     }
     return false;
-}
-
-function issue_token($audience = '', $issuer = '', $data = [], $secret = '', $expiry = 30)
-{
-    $issuance = time(); // issued at
-    $notbefore = $issuance; //not before in seconds
-    $expiry = $issuance + 60; // expire time in seconds
-    $payload = array(
-        "iss" => $issuer,
-        "aud" => $audience,
-        "iat" => $issuance,
-        "nbf" => $notbefore,
-        "exp" => $expiry,
-        "data" => $data
-    );
-    return JWT::encode($payload, $secret);
-}
-
-function refresh_token(string $token, $refresh_token)
-{
-    try {
-        $refresh_token = JWT::decode($refresh_token, get_secret_from_file(), array('HS256'));
-        if ($refresh_token) {
-            \Firebase\JWT\JWT::$timestamp = 0;
-            $decoded = JWT::decode($accessToken);
-            return issue_token($decoded['aud'], $decoded['iss'], $decoded["ata"], get_secret_from_file(), 60);
-        }
-    } catch (Exception $e) {
-        throw $e;
-    }
-}
-
-function validate_token($token)
-{
-    try {
-        JWT::decode($token, get_secret_from_file(), array('HS256'));
-        return true;
-    } catch (Exception $e) {
-        throw $e;
-    }
 }
 
 /**
@@ -627,18 +592,10 @@ function add_session($id, $key)
         if (!file_exists($dir)) {
             mkdir($dir, 0755, true);
         }
-        $sessions = [];
-        $account = null;
-        // if file exists, try to update the entry
-        if (file_exists($filename)) {
-            $content = file_get_contents($filename);
-            $sessions = parse_sessions($content);
-            if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1) {
-                $sessions[$index]->time = (new \DateTime())->getTimestamp();
-            }
-        }
-        // else, create a new session
-        if (!$account) {
+        $sessions = get_sessions();
+        if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1 && isset($sessions[$index])) {
+            $sessions[$index]->time = (new \DateTime())->getTimestamp();
+        } else {
             $sessions[] = (object) array(
                 'id' => password_hash($id, PASSWORD_DEFAULT),
                 'time' => (new \DateTime())->getTimestamp()
@@ -653,6 +610,24 @@ function add_session($id, $key)
     }
 }
 
+function get_sessions(): array
+{
+    if (!file_exists(VAR_FOLDER)) {
+        mkdir(VAR_FOLDER, 0755, true);
+    }
+    if (file_exists(DEFAULT_SESSIONSFILE)) {
+        return parse_sessions(file_get_contents(DEFAULT_SESSIONSFILE));
+    } else {
+        return [];
+    }
+}
+function create_session()
+{
+    return (object) array(
+        'id' => password_hash($id, PASSWORD_DEFAULT),
+        'time' => (new \DateTime())->getTimestamp()
+    );
+}
 /**
  * Deletes everything in the var folder except defaults
  * @return void
