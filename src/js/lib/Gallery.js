@@ -12,7 +12,6 @@ import {
   htmlToElement,
   isDomNode,
   mergeSettings,
-  scrollTo,
   stripExtension,
 } from "./Helpers.js";
 
@@ -156,9 +155,9 @@ class Gallery {
     this._current = image;
     if (this._current instanceof Image) {
       this._current.status = true;
-      scrollTo(this._current.dom, 0);
+      this._current.dom.scrollIntoView({ behavior: "smooth" });
     } else {
-      scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
 
