@@ -101,11 +101,11 @@ npx rollup ./src/js/edit.js --file www/assets/js/edit.js --format iife -w
 
 # Reduce filesize a little:
 npx rollup ./src/js/index.js --format iife --file temp.js
-npx uglify-js temp.js -o ./src/js/index.js
+npx uglify-js temp.js -o ./www/assets/js/index.js
 
 # sass files
 # this compiles everything you need
-sass --watch src/css:www/assets/css
+npx sass --watch src/css:www/assets/css
 ```
 
 ## Extra

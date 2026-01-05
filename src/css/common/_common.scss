@@ -1,5 +1,5 @@
-@import './variables';
-@import './fonts';
+@use "variables";
+@use "fonts";
 
 * {
   box-sizing: border-box;
@@ -17,13 +17,16 @@ html {
 body {
   margin: 0;
   padding: 0;
-  font-size: 12px;
-  font-family: $defaultFont;
+  font-size: 18px;
+  font-family: variables.$defaultFont;
   width: 100%;
   overflow-x: hidden;
   color: #333;
   min-height: 100%;
   min-width: 320px;
+  @media screen and (min-width: variables.$mobileBreakPoint) {
+    font-size: clamp(14px, 0.8dvw, 28px);
+  }
 }
 
 main {

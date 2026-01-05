@@ -1,21 +1,23 @@
-@import './common/common';
+@use "common/common";
+@use "common/variables";
+@use "common/fonts";
 
-@import './modules/modal';
-@import './modules/notice';
-@import './modules/buttons';
-@import './modules/controls';
-@import './modules/loader';
+@use "modules/modal";
+@use "modules/notice";
+@use "modules/buttons";
+@use "modules/controls";
+@use "modules/loader";
 
-@import './components/Gallery';
-@import './components/Header';
-@import './components/Footer';
+@use "components/Gallery";
+@use "components/Header";
+@use "components/Footer";
 
 body {
   background: pink;
-  padding-left: $sidebarWidth;
+  padding-left: variables.$sidebarWidth;
   min-height: 100%;
   transition: padding-left 0.2s ease-in-out;
-  @media screen and (max-width: $mobileBreakPoint) {
+  @media screen and (max-width: variables.$mobileBreakPoint) {
     padding-left: 0;
   }
 }
@@ -24,7 +26,7 @@ main {
   position: relative;
   height: 100%;
   padding-left: 20px;
-  @media screen and (max-width: $mobileBreakPoint) {
+  @media screen and (max-width: variables.$mobileBreakPoint) {
     padding-left: 0;
   }
 }
@@ -66,9 +68,9 @@ main {
 #drop-area {
   position: fixed;
   top: 0;
-  left: $sidebarWidth;
+  left: variables.$sidebarWidth;
   height: 100%;
-  width: calc(100% - #{$sidebarWidth});
+  width: calc(100% - #{variables.$sidebarWidth});
   z-index: -1;
   opacity: 0;
   background: rgb(51, 51, 51);
@@ -92,6 +94,5 @@ main {
 }
 
 .pure-button {
-  font-family: $defaultFont;
+  font-family: variables.$defaultFont;
 }
-

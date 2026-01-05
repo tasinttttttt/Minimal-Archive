@@ -1,235 +1,252 @@
 /* global Event */
 
-import LazyLoad from './LazyLoad.js'
-import Image from './Image.js'
+import LazyLoad from "./LazyLoad.js";
+import Image from "./Image.js";
 import {
   EVENT_IMAGE_UPDATE,
-  EVENT_RESET
-} from './Constants.js'
+  EVENT_NEXT_IMAGE,
+  EVENT_RESET,
+} from "./Constants.js";
 import {
   basename,
   htmlToElement,
   isDomNode,
   mergeSettings,
   scrollTo,
-  stripExtension
-} from './Helpers.js'
+  stripExtension,
+} from "./Helpers.js";
 
 class Gallery {
   constructor(options) {
     const defaults = {
-      gallerySelector: '.Gallery',
-      imageSelector: '.Image',
-      lazyloadSelector: '.lazy',
-      active: true
-    }
-    const {
-      gallerySelector,
-      imageSelector,
-      lazyloadSelector,
-      active
-    } = mergeSettings(options, defaults)
+      gallerySelector: ".Gallery",
+      imageSelector: ".Image",
+      lazyloadSelector: ".lazy",
+      active: true,
+    };
+    const { gallerySelector, imageSelector, lazyloadSelector, active } =
+      mergeSettings(options, defaults);
 
-    this.keyHandler = this.keyHandler.bind(this)
-    this.updateImage = this.updateImage.bind(this)
-    this.getInitializedImages = this.getInitializedImages.bind(this)
+    this.keyHandler = this.keyHandler.bind(this);
+    this.updateImage = this.updateImage.bind(this);
+    this.getInitializedImages = this.getInitializedImages.bind(this);
+    this.next = this.next.bind(this);
+    this.prev = this.prev.bind(this);
 
-    this._active = active
-    this._current = null
-    this._gallery = document.querySelector(gallerySelector)
+    this._active = active;
+    this._current = null;
+    this._gallery = document.querySelector(gallerySelector);
     if (!this._gallery) {
-      console.warn(`\nModule: Gallery.js\nWarning: No Gallery dom node found in document.\nCause: No gallerySelector provided.\nResult: Adding images may fail.`)
+      console.warn(
+        `\nModule: Gallery.js\nWarning: No Gallery dom node found in document.\nCause: No gallerySelector provided.\nResult: Adding images may fail.`
+      );
     }
-    this._imageSelector = imageSelector
-    this._images = this.getInitializedImages(imageSelector, active)
-    this._imagesBackup = this._images
+    this._imageSelector = imageSelector;
+    this._images = this.getInitializedImages(imageSelector, active);
+    this._imagesBackup = this._images;
     this._lazyload = new LazyLoad({
-      elements_selector: lazyloadSelector
-    })
+      elements_selector: lazyloadSelector,
+    });
 
     if (active) {
-      this.activate(true)
+      this.activate(true);
     } else {
-      this.deactivate(true)
+      this.deactivate(true);
     }
   }
 
   activate(force) {
     if (force || !this._active) {
-      this._active = true
-      this._gallery.classList.remove('Gallery--inactive')
-      this._gallery.classList.add('Gallery--active')
-      this.initListeners()
+      this._active = true;
+      this._gallery.classList.remove("Gallery--inactive");
+      this._gallery.classList.add("Gallery--active");
+      this.initListeners();
     }
   }
 
   deactivate(force) {
     if (force || this._active) {
-      this._active = false
-      this._gallery.classList.remove('Gallery--active')
-      this._gallery.classList.add('Gallery--inactive')
-      this.removeListeners()
-      this.deactivateImages()
+      this._active = false;
+      this._gallery.classList.remove("Gallery--active");
+      this._gallery.classList.add("Gallery--inactive");
+      this.removeListeners();
+      this.deactivateImages();
     }
   }
 
   toggleActive() {
-    this._active = !this._active
+    this._active = !this._active;
   }
 
   getInitializedImages(selector, active) {
-    const images = document.querySelectorAll(selector)
-    const result = []
-    let i = -1
+    const images = document.querySelectorAll(selector);
+    const result = [];
+    let i = -1;
     while (++i < images.length) {
-      const image = this.getNewImage(images[i], active)
+      const image = this.getNewImage(images[i], active);
       if (image) {
-        result.push(image)
+        result.push(image);
       }
     }
-    return result
+    return result;
   }
 
   initListeners() {
-    document.addEventListener(EVENT_IMAGE_UPDATE, this.updateImage)
-    document.addEventListener('keyup', this.keyHandler)
-    this.activateImages()
+    document.addEventListener(EVENT_IMAGE_UPDATE, this.updateImage);
+    document.addEventListener(EVENT_NEXT_IMAGE, this.next);
+    document.addEventListener("keyup", this.keyHandler);
+    this.activateImages();
   }
 
   removeListeners() {
-    document.removeEventListener(EVENT_IMAGE_UPDATE, this.updateImage)
-    document.removeEventListener('keyup', this.keyHandler)
-    this.deactivateImages()
+    document.removeEventListener(EVENT_IMAGE_UPDATE, this.updateImage);
+    document.removeEventListener(EVENT_NEXT_IMAGE, this.next);
+    document.removeEventListener("keyup", this.keyHandler);
+    this.deactivateImages();
   }
 
   activateImages() {
-    this._images.map(image => {
-      image.activate()
-    })
+    this._images.map((image) => {
+      image.activate();
+    });
   }
 
   deactivateImages() {
-    this._images.map(image => {
-      image.deactivate()
-    })
+    this._images.map((image) => {
+      image.deactivate();
+    });
   }
 
   updateImage(e) {
     if (e.detail && e.detail.image && e.detail.image instanceof Image) {
-      this.updateCurrentImage(e.detail.image)
+      this.updateCurrentImage(e.detail.image);
     } else {
-      this.updateCurrentImage(null)
+      this.updateCurrentImage(null);
     }
   }
 
   removeImageById(id) {
-    let target = null
-    this._images = this._images.filter(image => {
+    let target = null;
+    this._images = this._images.filter((image) => {
       if (image.getId() === id) {
-        target = image
-        return false
+        target = image;
+        return false;
       }
-      return true
-    })
+      return true;
+    });
     if (target) {
-      target.dom.classList.add('Image--markedfordeletion')
+      target.dom.classList.add("Image--markedfordeletion");
     }
-    return this._images
+    return this._images;
   }
 
   revertRemoveImageById(id) {
-    const match = this._imagesBackup.find(image => image.getId() === id)
+    const match = this._imagesBackup.find((image) => image.getId() === id);
     if (match) {
-      match.dom.classList.remove('Image--markedfordeletion')
-      this._images.push(match)
+      match.dom.classList.remove("Image--markedfordeletion");
+      this._images.push(match);
     }
-    return this._images
+    return this._images;
   }
 
   updateCurrentImage(image) {
     if (this._current instanceof Image) {
-      this._current.status = false
+      this._current.status = false;
     }
-    this._current = image
+    this._current = image;
     if (this._current instanceof Image) {
-      this._current.status = true
-      scrollTo(this._current.dom)
+      this._current.status = true;
+      scrollTo(this._current.dom, 0);
     } else {
-      scrollTo(0)
+      scrollTo(0, 0);
     }
   }
 
   keyHandler(e) {
     switch (e.key) {
-      case 'ArrowLeft':
+      case "ArrowLeft":
         if (this._current) {
-          e.preventDefault()
-          this.prev()
+          e.preventDefault();
+          this.prev();
         }
-        break
-      case 'ArrowRight':
+        break;
+      case "ArrowRight":
         if (this._current) {
-          e.preventDefault()
-          this.next()
+          e.preventDefault();
+          this.next();
         }
-        break
-      case 'Escape':
-        this.reset()
-        break
+        break;
+      case "Escape":
+        this.reset();
+        break;
     }
   }
 
   setImages(images) {
-    this._gallery.innerHTML = null
-    this.images = []
+    this._gallery.innerHTML = null;
     if (!images || !images.length) {
-      return
+      return;
     }
 
-    const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
-    images.sort((a, b) => collator.compare(a?.filename, b?.filename)).forEach((image, i) => {
-      if ('src' in image && 'filename' in image) {
-        this.addImage(this.getImageDom(image.src, image.filename))
-      }
-    })
+    const collator = new Intl.Collator("en", {
+      numeric: true,
+      sensitivity: "base",
+    });
+    images
+      .sort((a, b) => collator.compare(a?.filename, b?.filename))
+      .forEach((image, i) => {
+        if ("src" in image && "filename" in image) {
+          this.addImage(this.getImageDom(image.src, image.filename));
+        }
+      });
   }
 
   addImage(dom) {
-    const image = this.getNewImage(dom, this._active)
+    const image = this.getNewImage(dom, this._active);
     if (dom && document.body.contains(dom)) {
-      this._images.push(image)
+      this._images.push(image);
     } else if (dom && !document.body.contains(dom)) {
-      const images = document.querySelectorAll(this._imageSelector)
+      const images = document.querySelectorAll(this._imageSelector);
       if (images.length) {
-        images[images.length - 1].parentNode.insertBefore(dom, images[images.length - 1].nextSibling)
+        images[images.length - 1].parentNode.insertBefore(
+          dom,
+          images[images.length - 1].nextSibling
+        );
       } else {
-        this._gallery.appendChild(dom)
+        this._gallery.appendChild(dom);
       }
-      this._images.push(image)
+      this._images.push(image);
     }
-    this._imagesBackup = this._images
-    this._lazyload.update()
-    return image
+    this._imagesBackup = this._images;
+    this._lazyload.update();
+    return image;
   }
 
   getNewImage(dom, active) {
     if (!dom || !isDomNode(dom)) {
-      return null
+      return null;
     }
-    const url = dom.querySelector('img') && dom.querySelector('img').src
-    const datafilename = dom.querySelector('img') && dom.querySelector('img').getAttribute('data-filename')
-    const filename = datafilename ? basename(datafilename) : dom.querySelector('img') ? basename(dom.querySelector('img').src) : null
-    const caption = dom.querySelector('.Image__caption span') && dom.querySelector('.Image__caption span').innerHTML
+    const url = dom.querySelector("img") && dom.querySelector("img").src;
+    const datafilename =
+      dom.querySelector("img") &&
+      dom.querySelector("img").getAttribute("data-filename");
+    const filename = datafilename
+      ? basename(datafilename)
+      : dom.querySelector("img")
+      ? basename(dom.querySelector("img").src)
+      : null;
+    const caption =
+      dom.querySelector(".Image__caption span") &&
+      dom.querySelector(".Image__caption span").innerHTML;
 
-    return new Image(
-      {
-        url: url,
-        filename: filename,
-        caption: caption,
-        dom: dom,
-        active: active,
-        editable: !active
-      })
+    return new Image({
+      url: url,
+      filename: filename,
+      caption: caption,
+      dom: dom,
+      active: active,
+      editable: !active,
+    });
   }
 
   getImageDom(src, filename) {
@@ -238,47 +255,52 @@ class Gallery {
         <div class="Image__container">
           <img class="lazy miniarch" src="./assets/css/loading.gif" data-src="${src}" data-filename="${filename}" title="${filename} preview" />
         </div>
-        <div class="Image__caption"><span contenteditable="true">${stripExtension(filename)}</span></div>
-        </div>`)
+        <div class="Image__caption"><span contenteditable="true">${stripExtension(
+          filename
+        )}</span></div>
+        </div>`);
     }
   }
 
   next() {
-    const index = this.images.indexOf(this._current)
-    if (index >= 0 && index <= this.images.length - 2) {
-      this.updateCurrentImage(this.images[index + 1])
-    } else if (index > this.images.length - 2) {
-      this.updateCurrentImage(this.images[0])
+    if (!this._images) {
+      return;
+    }
+    const index = this._images.indexOf(this._current);
+    if (index >= 0 && index <= this._images.length - 2) {
+      this.updateCurrentImage(this._images[index + 1]);
+    } else if (index > this._images.length - 2) {
+      this.updateCurrentImage(this._images[0]);
     }
   }
 
   prev() {
-    const index = this.images.indexOf(this._current)
+    const index = this._images.indexOf(this._current);
     if (index > 0) {
-      this.updateCurrentImage(this.images[index - 1])
+      this.updateCurrentImage(this._images[index - 1]);
     } else if (index === 0) {
-      this.updateCurrentImage(this.images[this.images.length - 1])
+      this.updateCurrentImage(this._images[this._images.length - 1]);
     }
   }
 
   reset() {
-    document.dispatchEvent(new Event(EVENT_RESET))
+    document.dispatchEvent(new Event(EVENT_RESET));
   }
 
   set current(image) {
-    this.updateCurrentImage(image)
+    this.updateCurrentImage(image);
   }
   get current() {
-    return this._current
+    return this._current;
   }
 
   get images() {
-    return this._images
+    return this._images;
   }
 
   set images(images) {
-    this._images = images
+    this._images = images;
   }
 }
 
-export default Gallery
+export default Gallery;

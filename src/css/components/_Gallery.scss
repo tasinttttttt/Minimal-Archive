@@ -1,10 +1,17 @@
-@import 'Image';
+@use "Image";
+@use "../common/variables";
 
 .Gallery {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   width: 100%;
+  gap: 4em;
+  padding: 0 1em;
+  justify-content: space-evenly;
+  @media screen and (min-width: variables.$mobileBreakPoint) {
+    // gap: 3dvw;
+  }
 }
 
 .Gallery--inactive .Image {

@@ -1,10 +1,10 @@
-import Gallery from './lib/Gallery.js'
+import Gallery from "./lib/Gallery.js";
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
   const gallery = new Gallery({
-    image_selector: '.Image',
-    lazyload_selector: '.lazy'
-  })
+    image_selector: ".Image",
+    lazyload_selector: ".lazy",
+  });
 
-  gallery.reset()
-})
+  gallery.reset();
+});

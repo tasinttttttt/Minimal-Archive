@@ -1,12 +1,11 @@
-@import './common/common';
-@import './modules/notice';
-@import './modules/base';
-@import './modules/form';
-@import './modules/buttons';
+@use "common/common";
+@use "modules/notice";
+@use "modules/base";
+@use "modules/form";
+@use "modules/buttons";
 
 main {
   padding: 2em;
-  font-size: 14px;
 }
 
 legend {

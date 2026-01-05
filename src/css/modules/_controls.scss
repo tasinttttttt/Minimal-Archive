@@ -1,8 +1,10 @@
+@use "../common/variables";
+
 .controls {
-  font-family: $defaultFont;
+  font-family: variables.$defaultFont;
   -webkit-user-select: none;
   user-select: none;
-  width: $sidebarWidth;
+  width: variables.$sidebarWidth;
   height: 100%;
   position: fixed;
   overflow-y: auto;
@@ -13,11 +15,11 @@
   font-size: 16px;
   line-height: 1.6em;
   z-index: 1;
-  background: $sidebarBackground;
+  background: variables.$sidebarBackground;
   cursor: default;
   transition: left 0.2s ease-in-out, opacity 0.2s ease-in-out;
 
-  @media screen and (max-width: $mobileBreakPoint) {
+  @media screen and (max-width: variables.$mobileBreakPoint) {
     left: -100%;
     width: 100%;
   }
@@ -33,22 +35,22 @@
     position: -webkit-sticky;
     position: sticky;
     top: 0;
-    background-color: $sidebarBackground;
+    background-color: variables.$sidebarBackground;
     z-index: 1;
-    @media screen and (max-width: $mobileBreakPoint) {
-      color: $sidebarBackground;
+    @media screen and (max-width: variables.$mobileBreakPoint) {
+      color: variables.$sidebarBackground;
     }
   }
 
   .controls__buttons {
-    flex: 1
+    flex: 1;
   }
 
   .controls__footer {
     color: #9b9b9b;
     font-size: 12px;
     line-height: 1.2em;
-    background-color: $sidebarBackground;
+    background-color: variables.$sidebarBackground;
 
     .controls__footer__note {
       padding: 20px 10px;
@@ -96,7 +98,7 @@
     &.upload {
       cursor: pointer;
       position: relative;
-      input[type='file'] {
+      input[type="file"] {
         opacity: 0;
         position: absolute;
         overflow: hidden;
@@ -140,13 +142,12 @@
   }
 }
 
-
 .controls__mobile-toggle {
   z-index: 90;
   transition: all 0.2s ease-in-out;
   opacity: 0;
   visibility: hidden;
-  @media screen and (max-width: $mobileBreakPoint) {
+  @media screen and (max-width: variables.$mobileBreakPoint) {
     top: 15px;
     opacity: 1;
     visibility: visible;
@@ -177,7 +178,7 @@
   -webkit-touch-callout: none;
 }
 
-.controls__toggle:checked ~.controls {
+.controls__toggle:checked ~ .controls {
   left: 0;
 }
 
@@ -188,7 +189,7 @@
   display: none !important;
 }
 
-.controls__toggle:checked ~label {
+.controls__toggle:checked ~ label {
   .controls__mobile-toggle--open {
     display: none !important;
   }

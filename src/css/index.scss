@@ -1,8 +1,8 @@
-@import './common/common';
+@use "common/common";
 
-@import './components/Gallery';
-@import './components/Header';
-@import './components/Footer';
+@use "components/Gallery";
+@use "components/Header";
+@use "components/Footer";
 
 body {
   background: silver;
