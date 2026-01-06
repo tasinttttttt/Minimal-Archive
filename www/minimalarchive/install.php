@@ -78,7 +78,7 @@ if (!has_meta()) {
             <?php
             if (strlen($success)) {
                 put_success($success);
-                echo "<p><a href=\"" . url('/') . "\">" . translate('gotohomepage') . "</a></p>";
+                echo "<p><a href=\"" . url('/edit') . "\">" . translate('controls_open') . "</a></p>";
             }
             ?>
 
@@ -157,8 +157,8 @@ if (!has_meta()) {
                     <input type="hidden" name="csrf_token" value="<?= get_token('install') ?>" />
                     <button type="submit" class="pure-button pure-button-primary"><?= translate('confirm') ?></button>
                 </form>
-            </section>
-        <?php endif; ?>
+        </section>
+    <?php endif; ?>
     </main>
     <footer>
         <section class="note">
