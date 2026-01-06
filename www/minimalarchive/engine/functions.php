@@ -3,8 +3,6 @@ if (!defined('minimalarchive')) {
     redirect('/');
 }
 
-use \Firebase\JWT\JWT;
-
 /**
  * Detects if a needle exists in an array by key
  */
@@ -234,7 +232,7 @@ function folder_is_writable(string $folder)
  * @return [type]                [description]
  * @throws Exception
  */
-function check_uploadedfile($file, $uploadfolder = VAR_FOLDER, $max_filesize = 2097152)
+function check_uploadedfile($file, $max_filesize = 2097152)
 {
     if ($file && is_array($file) && array_key_exists('tmp_name', $file)) {
         if (!is_uploaded_file($file['tmp_name'])) {
@@ -472,11 +470,10 @@ function check_token(?string $token, ?string $form_name): bool
 function create_token(string $filename = '.token'): bool
 {
     try {
-        $dir = VAR_FOLDER . DS;
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
+        if (!file_exists(VAR_FOLDER)) {
+            mkdir(VAR_FOLDER, 0755, true);
         }
-        $file = fopen($dir . DS . $filename, "w");
+        $file = fopen(VAR_FOLDER . DS . $filename, "w");
         fwrite($file, bin2hex(random_bytes(32)) . "\n");
         fclose($file);
         return true;
@@ -505,49 +502,32 @@ function parse_sessions(string $content): array
 /**
  * Invalidates session on file
  */
-function invalidate_session(string $id, string $key, string $dir = VAR_FOLDER, string $filename = DEFAULT_SESSIONSFILE): bool
+function invalidate_sessions(string $filename = DEFAULT_SESSIONSFILE): bool
 {
     session_destroy();
-    if (!file_exists($dir)) {
-        return false;
+    if (!file_exists(VAR_FOLDER) || !file_exists($filename)) {
+        return true;
     }
-    $sessions = [];
     if (file_exists($filename)) {
-        $content = file_get_contents($filename);
-        $sessions = parse_sessions($content);
-        if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1) {
-            $i = 0;
-            foreach ($sessions as $session) {
-                if ($i !== $index) {
-                    $sessions[$i] = $session;
-                }
-                $i++;
-            }
-        }
-        $file = fopen($filename, "w");
-        fwrite($file, json_encode($sessions) . "\n");
-        fclose($file);
+        unlink($filename);
+        return true;
     }
-
-    return true;
+    return false;
 }
 
 /**
  * Validates session on file
  */
-function validate_session(string $id, string $key, string $dir = VAR_FOLDER, string $filename = DEFAULT_SESSIONSFILE, $session_max_duration = SESSION_MAXDURATION): bool
+function validate_session(string $id, string $key): bool
 {
-    if (!file_exists($dir)) {
-        return false;
-    }
-    if (file_exists($filename)) {
-        $content = file_get_contents($filename);
+    if (file_exists(DEFAULT_SESSIONSFILE)) {
+        $content = file_get_contents(DEFAULT_SESSIONSFILE);
         $sessions = parse_sessions($content);
         if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1) {
             if (!isset($sessions[$index])) {
                 return false;
             }
-            if (((int) (new \DateTime())->getTimestamp() - (int) $sessions[$index]->time) / (60 * 60) < $session_max_duration) {
+            if (((int) (new \DateTime())->getTimestamp() - (int) $sessions[$index]->time) / (60 * 60) < SESSION_MAXDURATION) {
                 return true;
             }
         }
@@ -620,13 +600,7 @@ function get_sessions(): array
         return [];
     }
 }
-function create_session()
-{
-    return (object) array(
-        'id' => password_hash($id, PASSWORD_DEFAULT),
-        'time' => (new \DateTime())->getTimestamp()
-    );
-}
+
 /**
  * Deletes everything in the var folder except defaults
  * @return void
@@ -866,4 +840,19 @@ function json_response(?string $message = 'Error', ?int $code = 500, mixed $data
     ];
     http_response_code($code);
     echo json_encode($response);
+}
+
+function login()
+{
+    if (isset($_POST['email']) && isset($_POST['password']) && check_token($_POST['csrf_token'], 'edit')) {
+        if (check_credentials($_POST['email'], $_POST['password']) === true) {
+            // if credentials are OK, setup session and create session file
+            $_SESSION['id'] = $_POST['email'];
+            add_session($_POST['email'], 'id');
+            return true;
+        } else {
+            throw new \Exception('bad credentials');
+        }
+    }
+    return false;
 }

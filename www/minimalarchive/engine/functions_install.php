@@ -79,17 +79,15 @@ function check_form($args)
 function create_accountfile($email, $password)
 {
     try {
-        $dir = VAR_FOLDER;
-        $filename = DEFAULT_ACCOUNTFILE;
-        $hashedPass = password_hash($password, PASSWORD_DEFAULT);
-        $hashedEmail = password_hash($email, PASSWORD_DEFAULT);
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        if (file_exists($filename)) {
+        if (file_exists(DEFAULT_ACCOUNTFILE)) {
             throw new Exception("account_exists", 1);
         }
-        $file = fopen($filename, "w");
+        if (!file_exists(VAR_FOLDER)) {
+            mkdir(VAR_FOLDER, 0755, true);
+        }
+        $hashedPass = password_hash($password, PASSWORD_DEFAULT);
+        $hashedEmail = password_hash($email, PASSWORD_DEFAULT);
+        $file = fopen(DEFAULT_ACCOUNTFILE, "w");
         fwrite($file, "$hashedEmail\n$hashedPass");
         fclose($file);
         return true;
@@ -160,14 +158,11 @@ function create_imagefolder()
  */
 function create_config()
 {
-    $dir = VAR_FOLDER;
-    $filename = DEFAULT_CONFIGFILE;
-
     try {
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
+        if (!file_exists(VAR_FOLDER)) {
+            mkdir(VAR_FOLDER, 0755, true);
         }
-        $file = fopen($filename, "w");
+        $file = fopen(DEFAULT_CONFIGFILE, "w");
         fwrite($file, 'SECRET' . ': ' . bin2hex(random_bytes(254)));
     } catch (Exception $e) {
         throw $e;

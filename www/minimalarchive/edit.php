@@ -12,30 +12,34 @@ if (!isset($_POST['csrf_token'])) {
         create_token();
     }
 }
+
 $error = "";
+$access_granted = false;
 if (isset($_SESSION['id'])) {
     if (validate_session($_SESSION['id'], 'id')) {
         $access_granted = true;
     } else {
-        invalidate_session($_SESSION['id'], 'id');
-        $access_granted = false;
-    }
-} else {
-    // CREDENTIALS CHECK
-    $access_granted = false;
-    if (isset($_POST['email']) && isset($_POST['password']) && check_token($_POST['csrf_token'], 'edit')) {
+        invalidate_sessions();
+        session_start();
         try {
-            if (check_credentials($_POST['email'], $_POST['password']) === true) {
-                // if credentials are OK, setup session and create session file
-                $_SESSION['id'] = $_POST['email'];
-                add_session($_POST['email'], 'id');
+            if (login() === true) {
                 $access_granted = true;
-            } else {
-                $error .= translate('bad_credentials');
             }
-        } catch (Exception $e) {
-            $error .= translate($e->getMessage());
+        } catch (\Exception $e) {
+            $access_granted = false;
+            $error = translate('bad_credentials');
         }
+    }
+}
+
+if (!$access_granted) {
+    try {
+        if (login() === true) {
+            $access_granted = true;
+        }
+    } catch (\Exception $e) {
+        $access_granted = false;
+        $error = translate('bad_credentials');
     }
 }
 unset($_POST);

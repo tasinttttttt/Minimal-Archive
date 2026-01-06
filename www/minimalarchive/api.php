@@ -4,7 +4,7 @@ if (!defined('minimalarchive') || !is_installed() || !isset($_POST['csrf_token']
     exit();
 }
 if (!validate_session($_SESSION['id'], 'id')) {
-    invalidate_session($_SESSION['id'], 'id');
+    invalidate_sessions();
     http_response_code(401);
     exit();
 }

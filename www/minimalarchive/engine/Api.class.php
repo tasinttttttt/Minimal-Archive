@@ -7,8 +7,7 @@ class Api
     public function __construct(
         private string $imageFolder = DEFAULT_IMAGEFOLDER,
         private string $metaFile = DEFAULT_METAFILE
-    ) {
-    }
+    ) {}
 
     /**
      * Upload operation handle
