@@ -9,6 +9,12 @@ class Api
         private string $metaFile = DEFAULT_METAFILE
     ) {}
 
+    private function sanitizeHtml(string $html): string
+    {
+        $allowedTags = defined('ALLOWED_HTML_TAGS') ? ALLOWED_HTML_TAGS : '<p><br><strong><em><u><span>';
+        return strip_tags($html, $allowedTags);
+    }
+
     /**
      * Upload operation handle
      */
@@ -48,11 +54,14 @@ class Api
             $result = [];
             foreach ($data as $key => $value) {
                 if ($key !== 'images' && !is_array($value)) {
+                    $sanitizedValue = in_array($key, ['note', 'title', 'description'])
+                        ? $this->sanitizeHtml(trim($value))
+                        : trim($value);
                     if (array_key_exists($key, $meta)) {
-                        $meta[$key] = trim($value);
+                        $meta[$key] = $sanitizedValue;
                         $result[$key] = $meta[$key];
-                    } else { // adding new entries
-                        $meta[$key] = trim($value);
+                    } else {
+                        $meta[$key] = $sanitizedValue;
                         $result[$key] = $meta[$key];
                     }
                 }
@@ -61,29 +70,6 @@ class Api
             if (array_key_exists('images', $data)) {
                 $result['images'] = $this->delete_all_files_except($data['images']);
                 $result['images'] = $this->update_filenames($data['images']);
-            }
-            json_response('ok', 200, $result);
-        } catch (\Exception $e) {
-            json_response($e->getMessage(), 500);
-        }
-    }
-
-    /**
-     * Creates a new account
-     * @param  string $identifier
-     * @param  string $password
-     * @return void
-     */
-    public function registerUser(string $identifier, string $password): void
-    {
-        if (!$identifier || !$password) {
-            json_response('Bad query', 400);
-            return;
-        }
-        try {
-            $result = [];
-            if (create_accountfile($identifier, $password)) {
-                $result['identifier'] = $identifier;
             }
             json_response('ok', 200, $result);
         } catch (\Exception $e) {

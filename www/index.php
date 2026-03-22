@@ -1,17 +1,5 @@
 <?php
 
-function getIp()
-{
-    if (!empty($_SERVER['HTTP_CLIENT_IP'])) { //check ip
-        $ip = $_SERVER['HTTP_CLIENT_IP'];
-    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) { //check proxy
-        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
-    } else {
-        $ip = $_SERVER['REMOTE_ADDR'];
-    }
-    return $ip;
-}
-
 $extensions = array("bmp", "webp", "jpg", "jpeg", "png", "gif", "css", "js", "sqlite", "eot", "svg", "ttf", "woff", "woff2", "avif");
 
 $path = parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH);

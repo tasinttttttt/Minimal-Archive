@@ -13,6 +13,20 @@ if (!isset($_POST['csrf_token'])) {
     }
 }
 
+$clientIp = $_SERVER['REMOTE_ADDR'] ?? null;
+if ($clientIp) {
+    $clientIp = normalize_ip($clientIp);
+}
+
+$rate_limit_error = null;
+if (isset($_POST['email'])) {
+    try {
+        check_rate_limit($_POST['email'], $clientIp);
+    } catch (\Exception $e) {
+        $rate_limit_error = translate('rate_limited');
+    }
+}
+
 $error = "";
 $access_granted = false;
 if (isset($_SESSION['id'])) {
@@ -22,19 +36,19 @@ if (isset($_SESSION['id'])) {
         invalidate_sessions();
         session_start();
         try {
-            if (login() === true) {
+            if (login($clientIp) === true) {
                 $access_granted = true;
             }
         } catch (\Exception $e) {
             $access_granted = false;
-            $error = translate('bad_credentials');
+            $error = $rate_limit_error ?? translate('bad_credentials');
         }
     }
 }
 
 if (!$access_granted) {
     try {
-        if (login() === true) {
+        if (login($clientIp) === true) {
             $access_granted = true;
         }
     } catch (\Exception $e) {

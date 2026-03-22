@@ -234,16 +234,27 @@ function folder_is_writable(string $folder)
  */
 function check_uploadedfile($file, $max_filesize = 2097152)
 {
-    if ($file && is_array($file) && array_key_exists('tmp_name', $file)) {
-        if (!is_uploaded_file($file['tmp_name'])) {
-            throw new Exception("file_upload_error", 1);
-        }
-        if (filesize($file['tmp_name']) > $max_filesize) {
-            throw new Exception("file_too_large", 1);
-        }
-    } else {
+    $allowed_mimes = ['image/gif', 'image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+
+    if (!$file || !is_array($file) || !array_key_exists('tmp_name', $file)) {
         throw new Exception("no_file", 1);
     }
+    if (!is_uploaded_file($file['tmp_name'])) {
+        throw new Exception("file_upload_error", 1);
+    }
+    if (filesize($file['tmp_name']) > $max_filesize) {
+        throw new Exception("file_too_large", 1);
+    }
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+
+    if (!in_array($mime, $allowed_mimes)) {
+        throw new Exception("invalid_file_type", 1);
+    }
+
+    return true;
 }
 
 /**
@@ -297,11 +308,14 @@ function update_filename(?string $file, ?string $newname): string
     $dir = pathinfo($file, PATHINFO_DIRNAME);
     $ext = pathinfo($file, PATHINFO_EXTENSION);
     $filename = pathinfo($file, PATHINFO_FILENAME);
-    $sanitizedNewname = $dir . DS . sanitize_filename($newname) . '.' . $ext;
+    $baseName = sanitize_filename($newname);
+    $sanitizedNewname = $dir . DS . $baseName . '.' . $ext;
     if ($newname !== $filename) {
         if (file_exists($file)) {
+            $counter = 1;
             while (file_exists($sanitizedNewname)) {
-                $sanitizedNewname = $dir . DS . sanitize_filename() . '.' . $ext;
+                $sanitizedNewname = $dir . DS . $baseName . '_' . $counter . '.' . $ext;
+                $counter++;
             }
             rename($file, $sanitizedNewname);
             return $sanitizedNewname;
@@ -319,73 +333,35 @@ function update_filename(?string $file, ?string $newname): string
  */
 function array_to_file(array $data, $file = DEFAULT_METAFILE)
 {
+    if (!$data || !is_array($data) || !count($data)) {
+        return true;
+    }
+    $dir = ROOT_FOLDER;
+    $filename = $file;
+    if (!file_exists($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $fp = fopen($filename, 'c+');
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        throw new Exception("lock_failed", 1);
+    }
+
     try {
-        if (!$data || !is_array($data) || !count($data)) {
-            return true;
-        }
-        $dir = ROOT_FOLDER;
-        $filename = $file;
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $file = fopen($filename, "w");
+        ftruncate($fp, 0);
+        rewind($fp);
         foreach ($data as $key => $value) {
-            fwrite($file, (string) $key . ": " . (string) $value . "\n");
+            fwrite($fp, (string) $key . ": " . (string) $value . "\n");
         }
-        fclose($file);
+        flock($fp, LOCK_UN);
+        fclose($fp);
         return true;
     } catch (Exception $e) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
         throw new Exception($e->getMessage(), $e->getCode());
     }
-}
-
-
-function get_secret_from_file($file = DEFAULT_CONFIGFILE)
-{
-    $data = textFileToArray($file);
-    if (array_key_exists('SECRET', $data)) {
-        return $data['SECRET'];
-    }
-    return '';
-}
-
-function get_host()
-{
-    $possibleHostSources = array('HTTP_X_FORWARDED_HOST', 'HTTP_HOST', 'SERVER_NAME', 'SERVER_ADDR');
-    $sourceTransformations = array(
-        "HTTP_X_FORWARDED_HOST" => function ($value) {
-            $elements = explode(',', $value);
-            return trim(end($elements));
-        }
-    );
-    $host = '';
-    foreach ($possibleHostSources as $source) {
-        if (!empty($host)) {
-            break;
-        }
-        if (!isset($_SERVER[$source]) || empty($_SERVER[$source])) {
-            continue;
-        }
-        $host = $_SERVER[$source];
-        if (array_key_exists($source, $sourceTransformations)) {
-            $host = $sourceTransformations[$source]($host);
-        }
-    }
-
-    // Remove port number from host
-    $host = preg_replace('/:\d+$/', '', $host);
-
-    return trim($host);
-}
-
-function get_header_auth_token()
-{
-    if (array_key_exists('HTTP_AUTHORIZATION', $_SERVER)) {
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
-        $arr = explode(" ", $authHeader);
-        return count($arr) >= 2 ? $arr[1] : '';
-    }
-    return '';
 }
 
 /**
@@ -565,13 +541,22 @@ function getindex_sessionbykey($id, $key, $sessions)
  */
 function add_session($id, $key)
 {
+    $dir = VAR_FOLDER;
+    $filename = DEFAULT_SESSIONSFILE;
+    if (!file_exists($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    $fp = fopen($filename, 'c+');
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        throw new Exception("lock_failed", 1);
+    }
+
     try {
-        $dir = VAR_FOLDER;
-        $filename = DEFAULT_SESSIONSFILE;
-        if (!file_exists($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $sessions = get_sessions();
+        $content = file_get_contents($filename);
+        $sessions = $content ? parse_sessions($content) : [];
+
         if (($index = getindex_sessionbykey($id, $key, $sessions)) > -1 && isset($sessions[$index])) {
             $sessions[$index]->time = (new \DateTime())->getTimestamp();
         } else {
@@ -580,11 +565,16 @@ function add_session($id, $key)
                 'time' => (new \DateTime())->getTimestamp()
             );
         }
-        $file = fopen($filename, "w");
-        fwrite($file, json_encode($sessions) . "\n");
-        fclose($file);
+
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, json_encode($sessions) . "\n");
+        flock($fp, LOCK_UN);
+        fclose($fp);
         return true;
     } catch (Exception $e) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
         throw new Exception($e->getMessage(), $e->getCode());
     }
 }
@@ -719,14 +709,6 @@ function sanitize_email(string $text): string
 }
 
 /**
- * Apply sanitization rules to password string
- */
-function sanitize_password(?string $text): string
-{
-    return $text;
-}
-
-/**
  * Apply sanitization rules to text string
  */
 function sanitize_text(?string $text = ''): string
@@ -842,17 +824,189 @@ function json_response(?string $message = 'Error', ?int $code = 500, mixed $data
     echo json_encode($response);
 }
 
-function login()
+function login(string $clientIp = null)
 {
     if (isset($_POST['email']) && isset($_POST['password']) && check_token($_POST['csrf_token'], 'edit')) {
         if (check_credentials($_POST['email'], $_POST['password']) === true) {
-            // if credentials are OK, setup session and create session file
             $_SESSION['id'] = $_POST['email'];
             add_session($_POST['email'], 'id');
+            reset_rate_limit($_POST['email'], $clientIp);
             return true;
         } else {
+            record_failed_attempt($_POST['email'], $clientIp);
             throw new \Exception('bad credentials');
         }
     }
     return false;
+}
+
+function normalize_ip(string $ip): ?string
+{
+    if (str_starts_with($ip, '::ffff:')) {
+        $ip = substr($ip, 5);
+    }
+    return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : null;
+}
+
+function record_failed_attempt(string $email, ?string $clientIp = null): void
+{
+    $file = VAR_FOLDER . DS . '.ratelimit';
+    $fp = fopen($file, 'c+');
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return;
+    }
+
+    try {
+        $content = file_exists($file) && filesize($file) > 0 ? file_get_contents($file) : '';
+        $data = $content ? json_decode($content, true) : [];
+        if (!is_array($data)) {
+            $data = [];
+        }
+    } catch (\Throwable $e) {
+        $data = [];
+    }
+
+    $now = time();
+    $window = defined('RATE_LIMIT_WINDOW') ? RATE_LIMIT_WINDOW : 300;
+
+    $keysToTrack = ['email:' . strtolower(trim($email))];
+    if ($clientIp) {
+        $normalizedIp = normalize_ip($clientIp);
+        if ($normalizedIp) {
+            $keysToTrack[] = 'ip:' . $normalizedIp;
+        }
+    }
+
+    foreach ($keysToTrack as $key) {
+        if (!isset($data[$key])) {
+            $data[$key] = ['count' => 0, 'reset' => $now + $window];
+        }
+        if ($now > $data[$key]['reset']) {
+            $data[$key] = ['count' => 0, 'reset' => $now + $window];
+        }
+        $data[$key]['count']++;
+        $data[$key]['last_attempt'] = $now;
+    }
+
+    $data = cleanup_stale_entries($data, $now);
+
+    ftruncate($fp, 0);
+    rewind($fp);
+    fwrite($fp, json_encode($data));
+    flock($fp, LOCK_UN);
+    fclose($fp);
+}
+
+function check_rate_limit(string $email, ?string $clientIp = null): bool
+{
+    $file = VAR_FOLDER . DS . '.ratelimit';
+    if (!file_exists($file) || filesize($file) === 0) {
+        return true;
+    }
+
+    $fp = fopen($file, 'r');
+    if (!flock($fp, LOCK_SH)) {
+        fclose($fp);
+        return true;
+    }
+
+    try {
+        $data = json_decode(file_get_contents($file), true);
+        if (!is_array($data)) {
+            $data = [];
+        }
+    } catch (\Throwable $e) {
+        $data = [];
+    }
+    flock($fp, LOCK_UN);
+    fclose($fp);
+
+    $now = time();
+    $maxAttempts = defined('RATE_LIMIT_MAX_ATTEMPTS') ? RATE_LIMIT_MAX_ATTEMPTS : 5;
+
+    $keysToCheck = ['email:' . strtolower(trim($email))];
+    if ($clientIp) {
+        $normalizedIp = normalize_ip($clientIp);
+        if ($normalizedIp) {
+            $keysToCheck[] = 'ip:' . $normalizedIp;
+        }
+    }
+
+    foreach ($keysToCheck as $key) {
+        if (isset($data[$key]) && is_array($data[$key])) {
+            if ($now > ($data[$key]['reset'] ?? 0)) {
+                continue;
+            }
+            if (($data[$key]['count'] ?? 0) >= $maxAttempts) {
+                throw new \Exception('rate_limited');
+            }
+        }
+    }
+
+    return true;
+}
+
+function reset_rate_limit(string $email, ?string $clientIp = null): void
+{
+    $file = VAR_FOLDER . DS . '.ratelimit';
+    if (!file_exists($file) || filesize($file) === 0) {
+        return;
+    }
+
+    $fp = fopen($file, 'c+');
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return;
+    }
+
+    try {
+        $content = file_get_contents($fp) ?: '';
+        rewind($fp);
+        $data = $content ? json_decode($content, true) : [];
+        if (!is_array($data)) {
+            $data = [];
+        }
+    } catch (\Throwable $e) {
+        $data = [];
+    }
+
+    $keysToRemove = ['email:' . strtolower(trim($email))];
+    if ($clientIp) {
+        $normalizedIp = normalize_ip($clientIp);
+        if ($normalizedIp) {
+            $keysToRemove[] = 'ip:' . $normalizedIp;
+        }
+    }
+
+    $modified = false;
+    foreach ($keysToRemove as $key) {
+        if (isset($data[$key])) {
+            unset($data[$key]);
+            $modified = true;
+        }
+    }
+
+    if ($modified) {
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, json_encode($data));
+    }
+
+    flock($fp, LOCK_UN);
+    fclose($fp);
+}
+
+function cleanup_stale_entries(array $data, int $now): array
+{
+    $window = defined('RATE_LIMIT_WINDOW') ? RATE_LIMIT_WINDOW : 300;
+    $buffer = $window * 2;
+
+    foreach ($data as $key => $entry) {
+        if (isset($entry['reset']) && ($now - $entry['reset']) > $buffer) {
+            unset($data[$key]);
+        }
+    }
+
+    return $data;
 }

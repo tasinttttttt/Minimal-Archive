@@ -22,3 +22,10 @@ define('ROOT_URL', trim(substr($_SERVER['SCRIPT_NAME'], 0, strrpos($_SERVER['SCR
 
 // In hours
 define('SESSION_MAXDURATION', 2);
+
+// Rate limiting settings
+define('RATE_LIMIT_WINDOW', 300);
+define('RATE_LIMIT_MAX_ATTEMPTS', 5);
+
+// Allowed HTML tags for contentEditable fields
+define('ALLOWED_HTML_TAGS', '<p><br><strong><em><u><span>');

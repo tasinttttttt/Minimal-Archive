@@ -38,6 +38,7 @@
   "password_uppercase": "At least an uppercase letter.",
   "password_special": "At least one special character.",
   "password_digit": "At least one digit.",
+  "rate_limited": "🙁 Too many failed attempts. Please try again in 5 minutes.",
   "save": "Save",
   "setup": "Setup",
   "share_image": "Share Image",

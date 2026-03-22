@@ -38,6 +38,7 @@
   "password_uppercase": "Au moins une lettre majuscule.",
   "password_special": "Au moins symbole spécial (ponctuation ou autres).",
   "password_digit": "Au moins un chiffre.",
+  "rate_limited": "🙁 Trop de tentatives échouées. Veuillez réessayer dans 5 minutes.",
   "save": "Enregistrer",
   "setup": "Installation",
   "share_image": "Image de partage",

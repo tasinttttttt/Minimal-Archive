@@ -22,7 +22,6 @@ function install($data, $retry = 0)
 {
     if ($retry === 3) {
         throw new Exception("too_many_retries");
-        return;
     }
     try {
         process_form($data);
