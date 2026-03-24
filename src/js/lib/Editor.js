@@ -3,13 +3,10 @@
 import Menu from "./Menu.js";
 import Modal from "./Modal.js";
 import Gallery from "./Gallery.js";
-import ProgressBar from "./ProgressBar.js";
 import {
   API_URL,
   API_SAVE,
   API_UPLOAD,
-  EVENT_LOADED,
-  EVENT_LOADING,
   SELECTOR_TITLE,
   SELECTOR_NOTE,
 } from "./Constants.js";
@@ -26,17 +23,89 @@ import {
   Fetch,
 } from "./Helpers.js";
 
+const MAX_CONCURRENT_UPLOADS = 3;
+const TOAST_DURATION_MS = 4000;
+
+// ---------------------------------------------------------------------------
+// Toast — self-contained, no markup required in the host page
+// ---------------------------------------------------------------------------
+
+const Toast = (() => {
+  let container = null;
+
+  function getContainer() {
+    if (!container) {
+      container = htmlToElement(
+        `<div class="Toast__container" aria-live="polite" aria-atomic="false"></div>`,
+      );
+      document.body.appendChild(container);
+    }
+    return container;
+  }
+
+  /**
+   * @param {string} message
+   * @param {'error'|'info'|'success'} type
+   * @param {number} duration  ms before auto-dismiss (0 = sticky)
+   * @returns {{ update: (msg: string) => void, dismiss: () => void }}
+   */
+  function show(message, type = "error", duration = TOAST_DURATION_MS) {
+    const toast = htmlToElement(`
+      <div class="Toast Toast--${type}" role="alert">
+        <span class="Toast__message">${message}</span>
+        <button class="Toast__close" aria-label="Dismiss">✕</button>
+      </div>
+    `);
+
+    const msgEl = toast.querySelector(".Toast__message");
+    let dismissTimer = null;
+    let dismissed = false;
+
+    const remove = () => {
+      if (toast.parentNode) toast.remove();
+    };
+
+    const dismiss = () => {
+      if (dismissed) return;
+      dismissed = true;
+      clearTimeout(dismissTimer);
+      toast.classList.add("Toast--leaving");
+      // animationend is unreliable when competing with the enter animation —
+      // use a hard timeout as the primary removal path.
+      setTimeout(remove, 300);
+    };
+
+    const update = (msg) => {
+      msgEl.textContent = msg;
+    };
+
+    toast.querySelector(".Toast__close").addEventListener("click", dismiss);
+
+    if (duration > 0) {
+      dismissTimer = setTimeout(dismiss, duration);
+    }
+
+    getContainer().appendChild(toast);
+    return { update, dismiss };
+  }
+
+  return { show };
+})();
+
 /**
- * Provides editing capabilities
- * Acts as interface between UI and API
+ * Provides editing capabilities.
+ * Acts as interface between UI and API.
+ *
+ * State is maintained in-memory (_state). The DOM is treated as a view of
+ * that state, never as a source of truth. Reads from DOM only happen on
+ * user-initiated fields (title, note) that are contenteditable, where the
+ * DOM is the canonical input surface.
  */
 class Editor {
   /**
-   * Binds functions to Editor, initializes options
    * @param  {Object}   options
    * @param  {string}   options.dropAreaSelector
    * @param  {string}   options.fileInputSelector
-   * @param  {string}   options.progressBarSelector
    * @param  {string}   options.buttonPreviewSelector
    * @param  {string}   options.fullscreenDropZone
    * @param  {string}   options.bgColor
@@ -44,12 +113,12 @@ class Editor {
    * @param  {string}   options.fontFamily
    * @param  {Gallery}  options.gallery
    * @param  {function} options.onUpdate
+   * @param  {function} options.onError
    */
   constructor(options) {
     const defaults = {
       dropAreaSelector: "#drop-area",
       fileInputSelector: "#file-input",
-      progressBarSelector: ".progress-bar",
       buttonPreviewSelector: ".editbutton.preview",
       gallery: new Gallery({
         gallerySelector: ".Gallery",
@@ -61,20 +130,39 @@ class Editor {
       bgColor: "#bbb",
       textColor: "#333",
       fontFamily: document.body.style.fontFamily,
-      onUpdate: (newData, oldData) => {},
+      onUpdate: (_newData, _oldData) => {},
+      onError: (context, err) => console.error(`[Editor] ${context}:`, err),
     };
+
     this.options = mergeSettings(options, defaults);
+
+    // Bind all methods that are used as callbacks
     this.actionSave = this.actionSave.bind(this);
     this.actionCancel = this.actionCancel.bind(this);
     this.actionUpdate = this.actionUpdate.bind(this);
+    this._processUploadQueue = this._processUploadQueue.bind(this);
+    this._uploadProgressMessage = this._uploadProgressMessage.bind(this);
+
+    // Upload queue state
+    this._uploadQueue = [];
+    this._activeUploads = 0;
+    this._uploadTotal = 0; // total files enqueued in current batch
+    this._uploadDone = 0; // completed (success or failure)
+    this._uploadToast = null; // live progress toast handle
+    this._isSaving = false;
+
+    // In-memory state — single source of truth
+    this._state = null;
+    this._backup = null;
+
     this.files = [];
     this.init(this.options);
   }
 
-  /**
-   * Initializer
-   * @param  {Object} options
-   */
+  // ---------------------------------------------------------------------------
+  // Initialization
+  // ---------------------------------------------------------------------------
+
   init(options) {
     const {
       bgColor,
@@ -84,8 +172,8 @@ class Editor {
       dropAreaSelector,
       fullscreenDropZone,
       fileInputSelector,
-      progressBarSelector,
       onUpdate,
+      onError,
     } = options;
 
     this._gallery = gallery;
@@ -93,25 +181,34 @@ class Editor {
     this._dropArea = document.querySelector(dropAreaSelector);
     this._fileInput = document.querySelector(fileInputSelector);
     this._fullscreenDropZone = Boolean(fullscreenDropZone);
+    this.onUpdate = onUpdate;
+    this.onError = onError;
 
     if (!this._gallery) {
-      console.warn(
-        `\nModule: Editor.js\nError: Can't create editor.\nCause: No Gallery provided.\nResult: Editor can't initialize.`
-      );
+      this.onError("init", "No Gallery provided — Editor cannot initialize.");
       return;
     }
     if (!this._dropArea) {
-      console.warn(
-        `\nModule: Editor.js\nError: Can't create editor.\nCause: No drop area with selector [${dropAreaSelector}] found in document.\nResult: Editor can't initialize.`
+      this.onError(
+        "init",
+        `No drop area found for selector [${dropAreaSelector}] — Editor cannot initialize.`,
       );
       return;
     }
     if (!this._fileInput) {
       console.warn(
-        `\nModule: Editor.js\nWarning: Can't create file input listener.\nCause: No file input with selector [${fileInputSelector}] found in document.\nResult: Upload by file input button is disabled.`
+        `[Editor] No file input found for selector [${fileInputSelector}] — upload via file input is disabled.`,
       );
     }
-    this._progressbar = new ProgressBar(progressBarSelector);
+
+    // Read CSRF token once at init, fail loudly if missing
+    this._csrfToken = this._readCsrfToken(this._dropArea);
+    if (!this._csrfToken) {
+      this.onError(
+        "init",
+        "CSRF token not found in drop area — uploads will fail.",
+      );
+    }
 
     this._menu = new Menu();
     (() =>
@@ -121,17 +218,33 @@ class Editor {
         triggers: ".modal__bg, .modal__close",
       }))();
 
-    this.onUpdate = onUpdate;
-    this.bgColor = bgColor;
-    this.textColor = textColor;
-    this.fontFamily = fontFamily;
-    this._backup = this.getState();
+    // Apply initial display properties
+    this._applyBgColor(bgColor);
+    this._applyTextColor(textColor);
+    this._applyFontFamily(fontFamily);
+
+    // Snapshot state after DOM is ready — this is the restore point for Cancel
+    this._state = this._readStateFromDom();
+    this._backup = this._cloneState(this._state);
+
     this.initListeners();
+
+    const sortOrderSelect = document.querySelector("#sort_order");
+    if (sortOrderSelect) {
+      sortOrderSelect.addEventListener("change", (e) => {
+        this._state.sortorder = e.target.value;
+        this._gallery.setImages(this._gallery.images, this._state.sortorder);
+      });
+    }
   }
 
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
   /**
-   * Ties a button to the Editor's menu object
-   * @param {Object} options refer to Menu class
+   * Ties a button to the Editor's menu object.
+   * @param {Object} options — refer to Menu class
    */
   addButton(options) {
     const button = this.menu.addButton(options);
@@ -140,94 +253,170 @@ class Editor {
     }
   }
 
+  /**
+   * Saves the current state if it differs from the last saved backup.
+   * No-ops if a save is already in flight.
+   */
+  actionSave() {
+    if (this._isSaving) return;
+    const state = this._collectCurrentState();
+    if (!areObjectsEqual(state, this._backup)) {
+      this._saveData(state);
+    }
+  }
+
+  /**
+   * Restores to the last saved backup if state has drifted.
+   * No-ops if a save is already in flight.
+   */
+  actionCancel() {
+    if (this._isSaving) return;
+    if (!areObjectsEqual(this._collectCurrentState(), this._backup)) {
+      this._saveData(this._cloneState(this._backup));
+    }
+  }
+
+  /**
+   * Marks an image for deletion.
+   * @param {Event} e
+   */
+  editDeleteImage(e) {
+    const id = this._getIdFromEvent(e);
+    if (id) {
+      this._gallery.removeImageById(id);
+      this._state.images = this._state.images.filter((img) => img.id !== id);
+    }
+  }
+
+  /**
+   * Recovers a previously deleted image.
+   * @param {Event} e
+   */
+  editRevertImage(e) {
+    const id = this._getIdFromEvent(e);
+    if (id) {
+      this._gallery.revertRemoveImageById(id);
+      // Restore image entry in state from backup
+      const reverted = this._backup.images.find((img) => img.id === id);
+      if (reverted && !this._state.images.find((img) => img.id === id)) {
+        this._state.images.push({ ...reverted });
+      }
+    }
+  }
+
+  /**
+   * Updates the view and internal state from API response data.
+   * @param {object} data
+   */
+  actionUpdate(data) {
+    const { images, title, note, bgcolor, textcolor, fontfamily, sortorder } =
+      data;
+
+    if (Array.isArray(images)) {
+      this._gallery.setImages(images, sortorder);
+      this._gallery.images.forEach((image) => this.addControlsToImage(image));
+      this._state.images = images.map((img) => ({ ...img }));
+    }
+    if (title !== undefined) {
+      const titleEl = document.querySelector(SELECTOR_TITLE);
+      if (titleEl) titleEl.innerHTML = title;
+      this._state.title = removeHtml(title);
+    }
+    if (note !== undefined) {
+      const noteEl = document.querySelector(SELECTOR_NOTE);
+      if (noteEl) {
+        const html = htmlToElement("<div>" + note + "</div>");
+        noteEl.replaceChildren(html);
+      }
+      this._state.note = processContentEditable(note);
+    }
+    if (bgcolor && isHexColor(bgcolor)) {
+      this._applyBgColor(bgcolor);
+      this._state.bgcolor = bgcolor;
+    }
+    if (textcolor && isHexColor(textcolor)) {
+      this._applyTextColor(textcolor);
+      this._state.textcolor = textcolor;
+    }
+    if (fontfamily) {
+      this._applyFontFamily(fontfamily);
+      this._state.fontfamily = fontfamily;
+    }
+    if (sortorder !== undefined) {
+      this._state.sortorder = sortorder;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Listeners
+  // ---------------------------------------------------------------------------
+
   initListeners() {
-    // Prevent default drag behaviors
-    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+    const events = ["dragenter", "dragover", "dragleave", "drop"];
+    events.forEach((eventName) => {
       this._dropArea.addEventListener(eventName, preventDefaults, false);
       document.body.addEventListener(eventName, preventDefaults, false);
     });
 
     if (this._fullscreenDropZone) {
-      ["dragenter"].forEach((eventName) => {
-        document.addEventListener(
-          eventName,
-          (e) => {
-            this._dropArea.classList.add("active");
-          },
-          true
-        );
-      });
-      ["dragleave", "drop"].forEach((eventName) => {
-        this._dropArea.addEventListener(
-          eventName,
-          (e) => {
-            this._dropArea.classList.remove("active");
-          },
-          true
-        );
-      });
-    }
-    // Highlight drop area when item is dragged over it
-    ["dragenter", "dragover"].forEach((eventName) => {
-      this._dropArea.addEventListener(
-        eventName,
-        () => {
-          this.highlight();
-        },
-        false
+      document.addEventListener(
+        "dragenter",
+        () => this._dropArea.classList.add("active"),
+        true,
       );
+      this._dropArea.addEventListener("dragleave", () =>
+        this._dropArea.classList.remove("active"),
+      );
+      this._dropArea.addEventListener("drop", () =>
+        this._dropArea.classList.remove("active"),
+      );
+    }
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      this._dropArea.addEventListener(eventName, () => this.highlight(), false);
     });
     ["dragleave", "drop"].forEach((eventName) => {
       this._dropArea.addEventListener(
         eventName,
-        () => {
-          this.unhighlight();
-        },
-        false
+        () => this.unhighlight(),
+        false,
       );
     });
 
-    // Handle dropped files
-    this._dropArea.addEventListener(
-      "drop",
-      (e) => {
-        this.handleDrop(e);
-      },
-      false
-    );
+    this._dropArea.addEventListener("drop", (e) => this.handleDrop(e), false);
 
     if (this._fileInput) {
       this._fileInput.addEventListener("change", (e) => {
-        if (e.target && e.target.files) {
+        if (e.target?.files) {
           this.handleFiles(e.target.files);
         }
       });
     }
 
-    // Adding controls to images
-    this._gallery.images.map((image) => this.addControlsToImage(image));
+    // Add controls to existing gallery images — only once
+    this._gallery.images.forEach((image) => this.addControlsToImage(image));
   }
 
+  // ---------------------------------------------------------------------------
+  // Image controls
+  // ---------------------------------------------------------------------------
+
   /**
-   * Given an image object, attaches menu buttons
+   * Attaches delete/revert controls to an image. Idempotent — will not
+   * double-attach if called again on the same image.
    * @param {Image} image
    */
   addControlsToImage(image) {
-    const deleteButton = this.getImageButton(
-      "╳",
-      "button--delete",
-      image.getId()
-    );
-    const revertButton = this.getImageButton(
-      "⏪",
-      "button--revert",
-      image.getId()
-    );
+    if (image.dom.querySelector(".Image__controls")) return;
+
+    const deleteButton = this._getImageButton("╳", "button--delete", image.id);
+    const revertButton = this._getImageButton("⏪", "button--revert", image.id);
     const imageControls = htmlToElement('<div class="Image__controls"></div>');
 
     imageControls.appendChild(deleteButton);
     imageControls.appendChild(revertButton);
     image.dom.appendChild(imageControls);
+
     this.menu.addButton({
       type: "toggle",
       domNode: deleteButton,
@@ -237,33 +426,27 @@ class Editor {
     });
   }
 
-  set bgColor(color) {
-    if (isHexColor(color)) {
-      this._bgColor = color;
-      document.body.style.backgroundColor = color;
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Styling setters/getters
+  // ---------------------------------------------------------------------------
 
+  set bgColor(color) {
+    this._applyBgColor(color);
+  }
   get bgColor() {
     return this._bgColor;
   }
 
   set textColor(color) {
-    if (isHexColor(color)) {
-      this._textColor = color;
-      document.body.style.color = color;
-    }
+    this._applyTextColor(color);
   }
-
   get textColor() {
     return this._textColor;
   }
 
   set fontFamily(fontfamily) {
-    this._fontFamily = fontfamily;
-    document.body.style.fontFamily = fontfamily;
+    this._applyFontFamily(fontfamily);
   }
-
   get fontFamily() {
     return this._fontFamily;
   }
@@ -271,324 +454,326 @@ class Editor {
   get buttons() {
     return this._buttons;
   }
-
   get gallery() {
     return this._gallery;
   }
-
   get menu() {
     return this._menu;
   }
 
-  /**
-   * Saves the current state if different than the previous state
-   * @param  {string} csrfToken required token for api
-   */
-  actionSave(csrfToken) {
-    const state = this.getState();
-    if (!areObjectsEqual(state, this._backup)) {
-      this.saveData(state, csrfToken);
+  // ---------------------------------------------------------------------------
+  // File handling
+  // ---------------------------------------------------------------------------
+
+  handleDrop(e) {
+    const files = [...e.dataTransfer.files].filter((f) =>
+      f.type.match(/image.*/),
+    );
+    if (files.length > 0) {
+      this.handleFiles(files);
     }
   }
 
   /**
-   * Saves the previous state if different than the current state
-   * @param  {string} csrfToken required token for api
+   * Enqueues files for upload and starts processing up to MAX_CONCURRENT_UPLOADS
+   * at once. Progress is shown in a live toast that updates as files complete.
+   * @param {FileList|File[]} files
    */
-  actionCancel(csrfToken) {
-    if (!areObjectsEqual(this.getState(), this._backup)) {
-      this.saveData(this._backup, csrfToken);
+  handleFiles(files) {
+    const fileArray = [...files];
+
+    // Accumulate into the running batch so mid-flight drops add to the total
+    this._uploadTotal += fileArray.length;
+    fileArray.forEach((file) => this._uploadQueue.push(file));
+
+    this._uploadToast ??= Toast.show(
+      this._uploadProgressMessage(),
+      "info",
+      0, // sticky — we dismiss it ourselves
+    );
+
+    this._processUploadQueue();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: upload queue
+  // ---------------------------------------------------------------------------
+
+  _processUploadQueue() {
+    while (
+      this._uploadQueue.length > 0 &&
+      this._activeUploads < MAX_CONCURRENT_UPLOADS
+    ) {
+      const file = this._uploadQueue.shift();
+      this._activeUploads++;
+
+      // We wrap the entire execution in a promise chain to catch
+      // synchronous errors (like a failing formData.append or a missing method)
+      Promise.resolve()
+        .then(() => this._uploadFile(file))
+        .then((result) => {
+          if (result?.data?.length && result.data[0]) {
+            const fileData = result.data[0];
+            this.previewFile(file, fileData.name);
+            this.files.push(fileData);
+            this._state.images.push({
+              id: fileData.id ?? fileData.name,
+              filename: fileData.name,
+              newfilename: stripExtension(fileData.name),
+            });
+          }
+        })
+        .catch((err) => {
+          this.onError("upload", err);
+          Toast.show(`Upload failed: "${file.name}"`, "error");
+        })
+        .finally(() => {
+          this._activeUploads--;
+          this._uploadDone++;
+
+          const done = this._uploadDone;
+          const total = this._uploadTotal;
+          const isQueueEmpty = this._uploadQueue.length === 0;
+          const isProcessingComplete =
+            this._activeUploads === 0 && isQueueEmpty;
+
+          this._uploadToast?.update(
+            isProcessingComplete
+              ? `Uploaded ${total} ${total === 1 ? "file" : "files"}`
+              : `Uploading… ${done} / ${total}`,
+          );
+
+          if (isProcessingComplete) {
+            const toast = this._uploadToast;
+            this._uploadToast = null;
+            this._uploadTotal = 0;
+            this._uploadDone = 0;
+            setTimeout(() => toast?.dismiss(), 1200);
+          }
+
+          // Trigger the next items in the queue
+          this._processUploadQueue();
+        });
     }
   }
 
   /**
-   * Marks an image for deletion
-   * @param  {event} e click event
+   * Generates the initial progress message for the upload toast.
+   * @returns {string}
    */
-  editDeleteImage(e) {
-    if (e) {
-      const id =
-        e.target.getAttribute("data-id") ||
-        e.target.parentNode.getAttribute("data-id");
-      if (id) {
-        this._gallery.removeImageById(id);
-      }
-    }
+  _uploadProgressMessage() {
+    return `Uploading… 0 / ${this._uploadTotal}`;
   }
 
-  /**
-   * Recovers an image
-   * @param  {event} e click event
-   */
-  editRevertImage(e) {
-    if (e) {
-      const id =
-        e.target.getAttribute("data-id") ||
-        e.target.parentNode.getAttribute("data-id");
-      if (id) {
-        this._gallery.revertRemoveImageById(id);
-      }
-    }
-  }
+  // ---------------------------------------------------------------------------
+  // Private: save/load
+  // ---------------------------------------------------------------------------
 
-  /**
-   * Saves data, dispatching a loading event, setting the new state
-   * @param  {object} data      [description]
-   * @param  {string} csrfToken required csrfToken
-   */
-  saveData(data, csrfToken) {
-    document.dispatchEvent(new Event(EVENT_LOADING));
-    this.uploadData(data, csrfToken)
+  _saveData(data) {
+    this._isSaving = true;
+    const saveToast = Toast.show("Saving…", "info", 0);
+
+    this._uploadData(data)
       .then((res) => {
         this.actionUpdate(res.data);
         this.onUpdate(res.data, this._backup);
-        this._backup = this.getState();
+        this._backup = this._cloneState(this._collectCurrentState());
+        saveToast.update("Saved ✓");
+        setTimeout(() => saveToast.dismiss(), 1200);
       })
-      .catch((err) => console.log(err))
-      .finally(() => document.dispatchEvent(new Event(EVENT_LOADED)));
-  }
-
-  /**
-   * Updates the view
-   * @param  {object} data
-   */
-  actionUpdate(data) {
-    const { images, title, note, bgcolor, textcolor, fontfamily } = data;
-
-    if (images) {
-      this._gallery.setImages(images);
-      this._gallery.images.map((image) => this.addControlsToImage(image));
-    }
-    if (title) {
-      document.querySelector(SELECTOR_TITLE).innerHTML = title;
-    }
-    if (note) {
-      const html = htmlToElement("<div>" + note + "</div>");
-      document.querySelector(SELECTOR_NOTE).innerHTML = "";
-      document.querySelector(SELECTOR_NOTE).appendChild(html);
-    }
-    if (bgcolor && isHexColor(bgcolor)) {
-      this.bgColor = bgcolor;
-      document.body.style.backgroundColor = this.bgColor;
-    }
-    if (textcolor && isHexColor(textcolor)) {
-      this.textColor = textcolor;
-      document.body.style.color = this.textColor;
-    }
-    if (fontfamily) {
-      this.fontFamily = fontfamily;
-      document.body.style.fontFamily = this.fontFamily;
-    }
-  }
-
-  /**
-   * Returns the current state
-   * @return {object}
-   */
-  getState() {
-    const result = {
-      title: "",
-      note: "",
-      images: [],
-    };
-    const title = document.querySelector(SELECTOR_TITLE);
-    const note = document.querySelector(SELECTOR_NOTE);
-    const bgColor = this.bgColor;
-    const textColor = this.textColor;
-    const fontFamily = this.fontFamily;
-    const images = this._gallery.images;
-
-    if (title) {
-      result.title = removeHtml(title.innerHTML);
-    }
-    if (note) {
-      result.note = processContentEditable(note.innerHTML);
-    }
-    if (bgColor && isHexColor(bgColor)) {
-      result.bgcolor = bgColor;
-    }
-    if (textColor && isHexColor(textColor)) {
-      result.textcolor = textColor;
-    }
-    if (fontFamily) {
-      result.fontfamily = fontFamily;
-    }
-    if (images && images.length) {
-      result.images = [...images].map((image) => {
-        return {
-          id: image.getId(),
-          filename: image.filename,
-          newfilename: removeHtml(image.caption),
-        };
+      .catch((err) => {
+        this.onError("save", err);
+        saveToast.dismiss();
+        Toast.show("Save failed. Please try again.", "error");
+      })
+      .finally(() => {
+        this._isSaving = false;
       });
-    }
-    return result;
   }
 
-  /**
-   * Calls the api with the new data to be saved
-   * @param  {object} data      [description]
-   * @param  {string} csrfToken [description]
-   * @return {Promise}           [description]
-   */
-  uploadData(data, csrfToken) {
+  _uploadData(data) {
     const api = new Fetch();
     const formData = new FormData();
-    const url = API_URL;
 
     formData.append("data", JSON.stringify(data));
     formData.append("action", API_SAVE);
-    formData.append("csrf_token", csrfToken);
+    formData.append("csrf_token", this._csrfToken);
 
-    return new Promise((resolve, reject) => {
-      api
-        .newRequest(url, formData)
-        .then((data) => resolve(data))
-        .catch((err) => reject(err));
-    });
+    return api.newRequest(API_URL, formData);
   }
 
-  /**
-   * Calls the api with a file data to be uploaded
-   * @param  {File} file        [description]
-   * @param  {string} csrfToken [description]
-   * @return {Promise}          [description]
-   */
-  uploadFile(file, csrfToken) {
+  _uploadFile(file) {
     const api = new Fetch();
-    const url = API_URL;
     const formData = new FormData();
 
     formData.append("file", file);
     formData.append("action", API_UPLOAD);
-    formData.append("csrf_token", csrfToken);
+    formData.append("csrf_token", this._csrfToken);
 
-    return new Promise((resolve, reject) => {
-      api
-        .newRequest(url, formData)
-        .then((data) => resolve(data))
-        .catch((err) => reject(err));
-    });
+    return api.newRequest(API_URL, formData);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: state helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Collects the full current state. For contenteditable fields (title, note)
+   * the DOM is authoritative since the user types directly into it.
+   * Everything else is read from this._state.
+   * @returns {object}
+   */
+  _collectCurrentState() {
+    const state = this._cloneState(this._state);
+
+    const titleEl = document.querySelector(SELECTOR_TITLE);
+    if (titleEl) state.title = removeHtml(titleEl.innerHTML);
+
+    const noteEl = document.querySelector(SELECTOR_NOTE);
+    if (noteEl) state.note = processContentEditable(noteEl.innerHTML);
+
+    // Sync caption edits from DOM back into state
+    state.images = this._gallery.images.map((image) => ({
+      id: image.id,
+      filename: image.filename,
+      newfilename: removeHtml(image.caption),
+    }));
+
+    const sortOrderEl = document.querySelector("#sort_order");
+    if (sortOrderEl) state.sortorder = sortOrderEl.value;
+
+    return state;
   }
 
   /**
-   * Adds a new image to Editor's gallery, and adds controls
-   * @param  {File} file     [description]
-   * @param  {string} filename [description]
+   * Reads the initial state from the DOM at page load.
+   * Only called once during init.
+   * @returns {object}
    */
+  _readStateFromDom() {
+    const state = {
+      title: "",
+      note: "",
+      images: [],
+      bgcolor: this._bgColor,
+      textcolor: this._textColor,
+      fontfamily: this._fontFamily,
+      sortorder: "asc",
+    };
+
+    const titleEl = document.querySelector(SELECTOR_TITLE);
+    if (titleEl) state.title = removeHtml(titleEl.innerHTML);
+
+    const noteEl = document.querySelector(SELECTOR_NOTE);
+    if (noteEl) state.note = processContentEditable(noteEl.innerHTML);
+
+    state.images = this._gallery.images.map((image) => ({
+      id: image.id,
+      filename: image.filename,
+      newfilename: removeHtml(image.caption),
+    }));
+
+    const sortOrderEl = document.querySelector("#sort_order");
+    if (sortOrderEl) state.sortorder = sortOrderEl.value;
+
+    return state;
+  }
+
+  _cloneState(state) {
+    // Deep clone via JSON — state contains only serializable data
+    return JSON.parse(JSON.stringify(state));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: display helpers
+  // ---------------------------------------------------------------------------
+
+  _applyBgColor(color) {
+    if (isHexColor(color)) {
+      this._bgColor = color;
+      document.body.style.backgroundColor = color;
+    }
+  }
+
+  _applyTextColor(color) {
+    if (isHexColor(color)) {
+      this._textColor = color;
+      document.body.style.color = color;
+    }
+  }
+
+  _applyFontFamily(fontfamily) {
+    if (fontfamily) {
+      this._fontFamily = fontfamily;
+      document.body.style.fontFamily = fontfamily;
+    }
+  }
+
+  _getImageButton(content, buttonClass, id) {
+    return htmlToElement(
+      `<div class="pure-button ${buttonClass}" data-id="${id}"><span>${content}</span></div>`,
+    );
+  }
+
+  _getIdFromEvent(e) {
+    if (!e) return null;
+    return (
+      e.target?.getAttribute("data-id") ||
+      e.target?.parentNode?.getAttribute("data-id") ||
+      null
+    );
+  }
+
+  /**
+   * Reads CSRF token from a DOM node. Called once at init.
+   * @param {Element} domNode
+   * @returns {string}
+   */
+  _readCsrfToken(domNode) {
+    if (domNode && isDomNode(domNode)) {
+      const input = domNode.querySelector("[name=csrf_token]");
+      return input?.value ?? "";
+    }
+    return "";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drop zone highlight
+  // ---------------------------------------------------------------------------
+
+  highlight() {
+    this._dropArea.classList.add("highlight");
+  }
+
+  unhighlight() {
+    this._dropArea.classList.remove("highlight");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Preview (unchanged behavior, kept for API compatibility)
+  // ---------------------------------------------------------------------------
+
   previewFile(file, filename) {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-
     reader.onloadend = () => {
       const image = this._gallery.addImage(
-        this.getPreviewDom(reader.result, filename)
+        this._getPreviewDom(reader.result, filename),
       );
-
       if (image) {
         this.addControlsToImage(image);
       }
     };
   }
 
-  /**
-   * Returns an image domNode
-   * @param  {string} src      [description]
-   * @param  {string} filename [description]
-   * @return {domNode}          [description]
-   */
-  getPreviewDom(src, filename) {
-    if (src) {
-      return htmlToElement(`<div class="Image">
-        <div class="Image__container">
-          <img class="lazy miniarch" src="./assets/css/loading.gif" data-src="${src}" data-filename="${filename}" title="${filename} preview" />
-        </div>
-        <div class="Image__caption"><span contenteditable="true">${stripExtension(
-          filename
-        )}</span></div>
-        </div>`);
-    }
-  }
-
-  /**
-   * Handles drop zone event, calling the file handler
-   * @param  {event} e drop event
-   */
-  handleDrop(e) {
-    const files = e.dataTransfer.files;
-    const imageFiles = [];
-
-    let i = -1;
-    while (++i < files.length) {
-      if (files[i].type.match(/image.*/)) {
-        imageFiles.push(files[i]);
-      }
-    }
-    if (imageFiles.length > 0) {
-      this.handleFiles(imageFiles);
-    }
-  }
-
-  /**
-   * Uploads a series of files
-   * @param  {array} files [description]
-   */
-  handleFiles(files) {
-    files = [...files];
-    this._progressbar.initializeProgress(files.length);
-    files.forEach((file) => {
-      this.uploadFile(file, this.getCsrfToken(this._dropArea))
-        .then((result) => {
-          if (result && result.data && result.data.length && result.data[0]) {
-            this.previewFile(file, result.data[0].name);
-            this.files.push(result.data[0]);
-          }
-        })
-        .catch((err) => {
-          console.log(err);
-        });
-    });
-  }
-
-  /**
-   * Returns a preformatted button domNode
-   * @param  {domNode|string} content     [description]
-   * @param  {string} buttonClass [description]
-   * @param  {string|number} id          [description]
-   * @return {domNode}             [description]
-   */
-  getImageButton(content, buttonClass, id) {
-    const dom = htmlToElement(
-      `<div class="pure-button ${buttonClass}" data-id="${id}"><span>${content}</span></div>`
-    );
-    return dom;
-  }
-
-  /**
-   * Gets a csrf_token in dom
-   * @param  {domNode} domNode target to where to look for the token
-   * @return {string}         [description]
-   */
-  getCsrfToken(domNode) {
-    if (domNode && isDomNode(domNode)) {
-      const inputElement = domNode.querySelector("[name=csrf_token]");
-      return inputElement && inputElement.value;
-    }
-    return "";
-  }
-
-  /**
-   * Adds the highlight class to drop area
-   */
-  highlight() {
-    this._dropArea.classList.add("highlight");
-  }
-
-  /**
-   * Removes the highlight class to drop area
-   */
-  unhighlight() {
-    this._dropArea.classList.remove("highlight");
+  _getPreviewDom(src, filename) {
+    if (!src) return null;
+    return htmlToElement(`<div class="Image">
+      <div class="Image__container">
+        <img class="lazy miniarch" src="./assets/css/loading.gif" data-src="${src}" data-filename="${filename}" title="${filename} preview" />
+      </div>
+      <div class="Image__caption"><span contenteditable="true">${stripExtension(filename)}</span></div>
+    </div>`);
   }
 }
 

@@ -51,6 +51,9 @@
   "view_page": "Voir la page",
   "welcome_edit_notice": "Tous les textes sont modifiables en cliquant dessus.",
   "welcome_add_image_notice": "Pour ajouter une image, glisser/déposer ou cliquer sur le bouton ajouter une image.",
+  "sort_order": "Ordre de tri",
+  "sort_ascending": "Croissant (A→Z)",
+  "sort_descending": "Décroissant (Z→A)",
   "welcome_reorder_notice": "Réorganiser les images en les renommant, '1-lorem' vient avant '2-ipsum'!",
   "yes": "Oui"
 }

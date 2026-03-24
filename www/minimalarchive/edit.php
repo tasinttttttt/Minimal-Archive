@@ -127,11 +127,12 @@ if ($access_granted):
     $bgcolor = array_key_exists('bgcolor', $meta) && $meta['bgcolor'] ? $meta['bgcolor'] : '#c0c0c0';
     $textcolor = array_key_exists('textcolor', $meta) && $meta['textcolor'] ? $meta['textcolor'] : '#333';
     $fontfamily = array_key_exists('fontfamily', $meta) && $meta['fontfamily'] ? $meta['fontfamily'] : '"Arcadia Textbook", "SF Mono", "Arcadia", "Zwizz", "Fira Code", "IBM Plex Mono", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;';
+    $sortorder = array_key_exists('sortorder', $meta) && in_array($meta['sortorder'], ['asc', 'desc']) ? $meta['sortorder'] : 'asc';
     $fonts = getFontsInFolder('assets/fonts');
 
     $error = null;
     try {
-        $images = getImagesInFolder($imagesdir);
+        $images = getImagesInFolder($imagesdir, $sortorder);
     } catch (Exception $e) {
         $error = translate($e->getMessage(), $imagesdir);
     }
@@ -227,6 +228,7 @@ if ($access_granted):
                                 <span><?= translate('add_images') ?></span>
                             </div>
                             <input id="file-input" type="file" name="image_upload" multiple accept='image/*' />
+                            <progress class="progress-bar" value="0" max="100"></progress>
                         </div>
                     </div>
 
@@ -266,6 +268,25 @@ if ($access_granted):
                                             $selected = $fontfamily == $fonts[$i]['name'];
                                             echo "<option value='" . $fonts[$i]['name'] . "' " . ($selected ? "selected='selected'" : '') . ">" . $fonts[$i]['name'] . "</option>";
                                         } ?>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="editbutton sort">
+                        <div class="editbutton__icon">
+                            <span class="icon">🔃</span>
+                        </div>
+                        <div class="editbutton__content">
+                            <div class="editbutton__label">
+                                <span><?= translate('sort_order') ?></span>
+                            </div>
+                            <div class="editbutton__submenu">
+                                <div>
+                                    <select name="sort_order" id="sort_order">
+                                        <option value="asc" <?= $sortorder === 'asc' ? "selected='selected'" : '' ?>><?= translate('sort_ascending') ?></option>
+                                        <option value="desc" <?= $sortorder === 'desc' ? "selected='selected'" : '' ?>><?= translate('sort_descending') ?></option>
                                     </select>
                                 </div>
                             </div>

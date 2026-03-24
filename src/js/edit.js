@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   editor.addButton({
     domNode: cancelbtn,
     callback: () => {
-      editor.actionCancel(getCsrfToken(cancelbtn))
+      window.location.reload()
     },
     csrf_token: getCsrfToken(cancelbtn)
   })

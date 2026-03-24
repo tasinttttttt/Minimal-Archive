@@ -71,6 +71,9 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+vendor
+node_modules
+
 # phpunit
 .phpunit.result.cache
 .phpunit.cache

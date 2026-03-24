@@ -20,6 +20,7 @@ function get_sanitizedform(array $args): array
         'imagesfolder' => isset($args['imagesfolder']) ? rtrim(ltrim(sanitize_text($args['imagesfolder']), '/')) : pathinfo(DEFAULT_IMAGEFOLDER, PATHINFO_FILENAME),
         'description' => isset($args['description']) ? sanitize_text($args['description']) : null,
         'note' => isset($args['note']) ? sanitize_text($args['note']) : null,
+        'sortorder' => isset($args['sortorder']) && in_array($args['sortorder'], ['asc', 'desc']) ? $args['sortorder'] : 'asc',
         'favicon' => isset($_FILES['favicon']) && strlen($_FILES['favicon']['name']) ? $_FILES['favicon'] : null,
         'socialimage' => isset($_FILES['socialimage']) && $_FILES['socialimage']['name'] ? $_FILES['socialimage'] : null,
     ];

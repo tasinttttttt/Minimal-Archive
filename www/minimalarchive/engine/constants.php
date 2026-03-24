@@ -11,7 +11,7 @@ define('DEFAULT_IMAGEFOLDER', ROOT_FOLDER . DS . 'images');
 define('DEFAULT_METAFILE', ROOT_FOLDER . DS . 'meta.txt');
 
 define('TRANSLATIONS_FOLDER', BASE_FOLDER . DS . 'translations');
-define('VAR_FOLDER', BASE_FOLDER . DS . 'var');
+define('VAR_FOLDER', ROOT_FOLDER . DS . 'var');
 
 define('DEFAULT_ACCOUNTFILE', VAR_FOLDER . DS . '.account');
 define('DEFAULT_SESSIONSFILE', VAR_FOLDER . DS . '.sessions');

@@ -1,0 +1,236 @@
+#!/usr/bin/env php
+<?php
+
+function error(string $message): void
+{
+    echo "MinimalArchive ERROR: $message\n";
+    exit(1);
+}
+
+$scriptDir  = __DIR__;
+$packageDir = dirname($scriptDir);
+$projectRoot = findProjectRoot($scriptDir);
+
+if (!is_dir($projectRoot) || !is_writable($projectRoot)) {
+    error("Project root '$projectRoot' is not accessible or writable.");
+}
+
+$expectedFiles = ['assets', 'minimalarchive', 'index.php'];
+foreach ($expectedFiles as $file) {
+    if (!file_exists($packageDir . '/' . $file)) {
+        error("Required file/folder '$file' not found in package at '$packageDir'. Package may be incomplete.");
+    }
+}
+
+// Detect mode: var/ is only ever created by this script, so its absence means first install.
+$isUpdate = is_dir($projectRoot . '/var');
+
+echo "MinimalArchive: " . ($isUpdate ? "Updating" : "Installing") . "...\n";
+
+$errors = [];
+
+// --- images/ : create on install, never touch on update ---
+if (!$isUpdate) {
+    if (!is_dir($projectRoot . '/images')) {
+        if (!@mkdir($projectRoot . '/images', 0755, true)) {
+            $errors[] = "Failed to create images/ directory";
+        } else {
+            echo "  Created images/\n";
+        }
+    } else {
+        echo "  images/ already exists, skipping\n";
+    }
+}
+
+// --- var/ : create on install, never touch on update ---
+if (!$isUpdate) {
+    if (!@mkdir($projectRoot . '/var', 0755, true)) {
+        $errors[] = "Failed to create var/ directory";
+    } else {
+        echo "  Created var/\n";
+    }
+}
+
+// --- minimalarchive/ : copy on install, overwrite fully on update ---
+if ($isUpdate) {
+    echo "  Overwriting minimalarchive/...\n";
+    $result = overwriteDirectory($packageDir . '/minimalarchive', $projectRoot . '/minimalarchive');
+} else {
+    echo "  Copying minimalarchive/...\n";
+    $result = copyDirectory($packageDir . '/minimalarchive', $projectRoot . '/minimalarchive');
+}
+if ($result !== true) $errors[] = $result;
+
+// --- assets/ ---
+if ($isUpdate) {
+    // Only overwrite the subdirectories owned by the package: css/, js/, fonts/
+    // Any other directories the user may have added are left alone.
+    echo "  Updating assets (css/, js/, fonts/)...\n";
+    foreach (['css', 'js', 'fonts'] as $sub) {
+        $src  = $packageDir  . '/assets/' . $sub;
+        $dest = $projectRoot . '/assets/' . $sub;
+        if (!is_dir($src)) continue;
+        $result = overwriteDirectory($src, $dest);
+        if ($result !== true) $errors[] = $result;
+    }
+} else {
+    echo "  Copying assets/...\n";
+    $result = copyDirectory($packageDir . '/assets', $projectRoot . '/assets');
+    if ($result !== true) $errors[] = $result;
+}
+
+// --- index.php : copy on install, overwrite on update ---
+$result = copyFile($packageDir . '/index.php', $projectRoot . '/index.php', overwrite: true);
+if ($result !== true) $errors[] = $result;
+else echo "  " . ($isUpdate ? "Updated" : "Copied") . " index.php\n";
+
+// --- .htaccess : copy on install, overwrite on update ---
+if (file_exists($packageDir . '/.htaccess')) {
+    $result = copyFile($packageDir . '/.htaccess', $projectRoot . '/.htaccess', overwrite: true);
+    if ($result !== true) $errors[] = $result;
+    else echo "  " . ($isUpdate ? "Updated" : "Copied") . " .htaccess\n";
+} else {
+    echo "  Warning: .htaccess not found in package, skipping\n";
+}
+
+if (!empty($errors)) {
+    echo "\nMinimalArchive: Setup failed:\n";
+    foreach ($errors as $err) {
+        echo "  - $err\n";
+    }
+    exit(1);
+}
+
+echo "MinimalArchive: " . ($isUpdate ? "Update" : "Install") . " complete!\n";
+exit(0);
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Copies $source to $dest, optionally overwriting.
+ * Returns true on success, an error string on failure.
+ */
+function copyFile(string $source, string $dest, bool $overwrite = false): string|true
+{
+    if (!file_exists($source)) {
+        return "Source file '$source' not found";
+    }
+    if (file_exists($dest) && !$overwrite) {
+        return true; // intentional no-op
+    }
+    $dir = dirname($dest);
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+        return "Failed to create directory '$dir'";
+    }
+    if (!@copy($source, $dest)) {
+        return "Failed to copy '$source' to '$dest'";
+    }
+    return true;
+}
+
+/**
+ * Recursively copies $source into $dest.
+ * Skips files that already exist at the destination (install-only semantics).
+ */
+function copyDirectory(string $source, string $dest): string|true
+{
+    if (!is_dir($dest) && !@mkdir($dest, 0755, true)) {
+        return "Failed to create directory '$dest'";
+    }
+
+    /** @var RecursiveIteratorIterator<RecursiveDirectoryIterator> $iterator */
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($iterator as $item) {
+        $rel    = $iterator->getSubPathName();
+        $target = $dest . '/' . $rel;
+
+        if ($item->isDir()) {
+            if (!is_dir($target) && !@mkdir($target, 0755, true)) {
+                return "Failed to create directory '$target'";
+            }
+        } else {
+            $dir = dirname($target);
+            if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+                return "Failed to create directory '$dir'";
+            }
+            if (!file_exists($target) && !@copy($item->getPathname(), $target)) {
+                return "Failed to copy '{$item->getPathname()}' to '$target'";
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Recursively copies $source into $dest, overwriting every file.
+ * Creates destination directories as needed.
+ */
+function overwriteDirectory(string $source, string $dest): string|true
+{
+    if (!is_dir($dest) && !@mkdir($dest, 0755, true)) {
+        return "Failed to create directory '$dest'";
+    }
+
+    /** @var RecursiveIteratorIterator<RecursiveDirectoryIterator> $iterator */
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($iterator as $item) {
+        $rel    = $iterator->getSubPathName();
+        $target = $dest . '/' . $rel;
+
+        if ($item->isDir()) {
+            if (!is_dir($target) && !@mkdir($target, 0755, true)) {
+                return "Failed to create directory '$target'";
+            }
+        } else {
+            $dir = dirname($target);
+            if (!is_dir($dir) && !@mkdir($dir, 0755, true)) {
+                return "Failed to create directory '$dir'";
+            }
+            if (!@copy($item->getPathname(), $target)) {
+                return "Failed to overwrite '{$item->getPathname()}' to '$target'";
+            }
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Walks up from $scriptDir to find the Composer project root.
+ *
+ * Looks for the directory that *contains* vendor/ — not the vendor dir itself.
+ * The script lives at vendor/author/package/bin/, so splitting on /vendor/ and
+ * taking the left part gives us the project root directly.
+ */
+function findProjectRoot(string $scriptDir): string
+{
+    // Fast path: resolve via vendor/ path segment
+    if (str_contains($scriptDir, '/vendor/')) {
+        return explode('/vendor/', $scriptDir, 2)[0];
+    }
+
+    // Fallback: walk up looking for composer.json or vendor/autoload.php
+    $current = $scriptDir;
+    for ($i = 0; $i < 10; $i++) {
+        if (file_exists($current . '/vendor/autoload.php') || file_exists($current . '/composer.json')) {
+            return $current;
+        }
+        $parent = dirname($current);
+        if ($parent === $current) break;
+        $current = $parent;
+    }
+
+    error("Could not determine project root from '$scriptDir'.");
+    return "";
+}

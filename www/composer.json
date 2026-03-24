@@ -1,0 +1,20 @@
+{
+    "name": "tasinttttttt/minimal-archive",
+    "description": "A minimal php/javascript tool to display images on a web page",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "MinimalArchive\\": "minimalarchive/"
+        }
+    },
+    "bin": ["bin/minimal-archive-setup"],
+    "scripts": {
+        "post-autoload-dump": [
+            "@php bin/minimal-archive-setup"
+        ]
+    }
+}

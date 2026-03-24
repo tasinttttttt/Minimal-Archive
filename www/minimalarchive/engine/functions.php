@@ -187,9 +187,10 @@ function getFontStyle(?array $font = null)
 /**
  * Returns an array of images in folder
  * @param  string|null $folder
+ * @param  string      $order   Sort order: 'asc' or 'desc'
  * @return array
  */
-function getImagesInFolder(?string $folder = null)
+function getImagesInFolder(?string $folder = null, string $order = 'asc')
 {
     $supported_formats = array(
         'gif',
@@ -200,7 +201,14 @@ function getImagesInFolder(?string $folder = null)
         'webp'
     );
     try {
-        return getFilenamesInFolder($folder, $supported_formats);
+        $images = getFilenamesInFolder($folder, $supported_formats);
+        usort($images, function($a, $b) use ($order) {
+            if ($order === 'desc') {
+                return strcasecmp($b, $a);
+            }
+            return strcasecmp($a, $b);
+        });
+        return $images;
     } catch (Exception $e) {
         throw $e;
     }
@@ -713,7 +721,15 @@ function sanitize_email(string $text): string
  */
 function sanitize_text(?string $text = ''): string
 {
-    return htmlspecialchars($text);
+    return trim($text);
+}
+
+/**
+ * Apply sanitization rules to password string
+ */
+function sanitize_password(?string $password): ?string
+{
+    return $password;
 }
 
 /**
@@ -824,7 +840,7 @@ function json_response(?string $message = 'Error', ?int $code = 500, mixed $data
     echo json_encode($response);
 }
 
-function login(string $clientIp = null)
+function login(?string $clientIp = null)
 {
     if (isset($_POST['email']) && isset($_POST['password']) && check_token($_POST['csrf_token'], 'edit')) {
         if (check_credentials($_POST['email'], $_POST['password']) === true) {
