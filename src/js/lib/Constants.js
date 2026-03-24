@@ -7,6 +7,7 @@ export const API_SAVE = "save";
 export const SELECTOR_TITLE = "main header .title";
 export const SELECTOR_NOTE = ".note";
 export const SELECTOR_IMAGE = ".Image__container img";
+export const SELECTOR_SORT_ORDER = "#sort_order";
 
 export const EVENT_IMAGE_UPDATE = "image-update";
 export const EVENT_LOADED = "loaded";

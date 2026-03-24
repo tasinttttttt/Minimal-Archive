@@ -39,10 +39,9 @@ class Gallery {
     this.next = this.next.bind(this);
     this.prev = this.prev.bind(this);
 
-    this._active = false; // will be set properly by activate/deactivate below
+    this._active = false;
     this._current = null;
     this._imageSelector = imageSelector;
-
     this._gallery = document.querySelector(gallerySelector);
     if (!this._gallery) {
       console.warn(
@@ -51,17 +50,11 @@ class Gallery {
     }
 
     this._images = this._initializeImages(imageSelector, active);
-    // Backup keeps the original set for revert. Use a separate shallow clone.
     this._imagesBackup = [...this._images];
-
     this._lazyload = new LazyLoad({ elements_selector: lazyloadSelector });
 
     // Activate or deactivate, applying all side effects via the proper methods
-    if (active) {
-      this.activate(true);
-    } else {
-      this.deactivate(true);
-    }
+    this[active ? "activate" : "deactivate"](true);
   }
 
   // ---------------------------------------------------------------------------
@@ -71,36 +64,39 @@ class Gallery {
   activate(force = false) {
     if (!force && this._active) return;
     this._active = true;
-    this._gallery?.classList.remove("Gallery--inactive");
-    this._gallery?.classList.add("Gallery--active");
-    this._initListeners();
+    this._updateGalleryClasses();
+    this._initActiveListeners();
   }
 
   deactivate(force = false) {
     if (!force && !this._active) return;
     this._active = false;
-    this._gallery?.classList.remove("Gallery--active");
-    this._gallery?.classList.add("Gallery--inactive");
-    this._removeListeners();
+    this._updateGalleryClasses();
+    this._removeActiveListeners();
     this._deactivateImages();
   }
 
   toggleActive() {
-    this._active ? this.deactivate(true) : this.activate(true);
+    this[!this._active ? "activate" : "deactivate"](true);
+  }
+
+  _updateGalleryClasses() {
+    this._gallery?.classList.toggle("Gallery--active", this._active);
+    this._gallery?.classList.toggle("Gallery--inactive", !this._active);
   }
 
   // ---------------------------------------------------------------------------
   // Listener setup / teardown
   // ---------------------------------------------------------------------------
 
-  _initListeners() {
+  _initActiveListeners() {
     document.addEventListener(EVENT_IMAGE_UPDATE, this.updateImage);
     document.addEventListener(EVENT_NEXT_IMAGE, this.next);
     document.addEventListener("keyup", this.keyHandler);
     this._activateImages();
   }
 
-  _removeListeners() {
+  _removeActiveListeners() {
     document.removeEventListener(EVENT_IMAGE_UPDATE, this.updateImage);
     document.removeEventListener(EVENT_NEXT_IMAGE, this.next);
     document.removeEventListener("keyup", this.keyHandler);
@@ -121,39 +117,28 @@ class Gallery {
 
   /**
    * Replaces the gallery contents from a plain data array.
-   * Accepts objects with at least { filename, src } — no stale Image refs needed.
-   *
    * @param {Array<{filename: string, src?: string, _dom?: Element}>} images
-   * @param {string} sortOrder  "asc" | "desc"
+   * @param {string} sortOrder "asc" | "desc"
    */
   setImages(images, sortOrder = "asc") {
     if (!images?.length) {
-      this._removeListeners();
+      this._removeActiveListeners();
       this._images = [];
       this._current = null;
       this._gallery?.replaceChildren();
       return;
     }
 
-    // Normalize to plain { filename, src } snapshots before clearing the gallery.
-    //
-    // Two possible inputs:
-    //   1. Gallery Image instances (e.g. sort order change) — src lives in the
-    //      live DOM as data-src (img.src is the loading gif while lazy-loading
-    //      is pending). Must be read BEFORE replaceChildren() detaches the nodes.
-    //   2. Plain API response objects (e.g. after save) — src comes directly
-    //      from the server as image.src or image.url.
     const snapshots = images.map((image) => ({
       filename: image.filename,
       src:
-        image.dom?.querySelector("img")?.getAttribute("data-src") ?? // Image instance
-        image.src ?? // plain API object
-        image.url ?? // fallback field name
+        image.dom?.querySelector("img")?.getAttribute("data-src") ??
+        image.src ??
+        image.url ??
         null,
     }));
 
-    // Now safe to tear down
-    this._removeListeners();
+    this._removeActiveListeners();
     this._images = [];
     this._current = null;
     this._gallery?.replaceChildren();
@@ -174,30 +159,18 @@ class Gallery {
         }
       });
 
-    // Re-attach listeners now that images are in place
-    if (this._active) {
-      this._initListeners();
-    }
+    if (this._active) this._initActiveListeners();
   }
 
-  /**
-   * Adds a single image DOM node to the gallery. Idempotent with respect to
-   * DOM insertion — won't insert if the node is already in the document.
-   *
-   * @param  {Element} dom
-   * @returns {Image|null}
-   */
   addImage(dom) {
     const image = this._buildImage(dom, this._active);
     if (!image) return null;
 
     if (!document.body.contains(dom) && this._gallery) {
       const existing = this._gallery.querySelectorAll(this._imageSelector);
-      if (existing.length) {
-        existing[existing.length - 1].after(dom);
-      } else {
-        this._gallery.appendChild(dom);
-      }
+      existing.length
+        ? existing[existing.length - 1].after(dom)
+        : this._gallery.appendChild(dom);
     }
 
     this._images.push(image);
@@ -206,11 +179,6 @@ class Gallery {
     return image;
   }
 
-  /**
-   * Marks an image for deletion (removes from active set, keeps DOM for revert).
-   * @param {string|number} id
-   * @returns {Image[]} updated images array
-   */
   removeImageById(id) {
     const target = this._images.find((img) => img.id === id);
     if (target) {
@@ -220,14 +188,8 @@ class Gallery {
     return this._images;
   }
 
-  /**
-   * Reverts a deletion — restores image from backup into the active set.
-   * @param {string|number} id
-   * @returns {Image[]} updated images array
-   */
   revertRemoveImageById(id) {
-    const alreadyActive = this._images.some((img) => img.id === id);
-    if (alreadyActive) return this._images;
+    if (this._images.some((img) => img.id === id)) return this._images;
 
     const match = this._imagesBackup.find((img) => img.id === id);
     if (match) {
@@ -242,14 +204,13 @@ class Gallery {
   // ---------------------------------------------------------------------------
 
   updateImage(e) {
-    const image = e?.detail?.image instanceof Image ? e.detail.image : null;
-    this._setCurrentImage(image);
+    this._setCurrentImage(
+      e?.detail?.image instanceof Image ? e.detail.image : null,
+    );
   }
 
   _setCurrentImage(image) {
-    if (this._current instanceof Image) {
-      this._current.status = false;
-    }
+    if (this._current instanceof Image) this._current.status = false;
     this._current = image;
     if (this._current instanceof Image) {
       this._current.status = true;
@@ -262,28 +223,18 @@ class Gallery {
   next() {
     if (!this._images.length) return;
     const index = this._images.indexOf(this._current);
-    if (index === -1) {
-      // Nothing selected — select first
-      this._setCurrentImage(this._images[0]);
-    } else if (index < this._images.length - 1) {
-      this._setCurrentImage(this._images[index + 1]);
-    } else {
-      // Wrap around
-      this._setCurrentImage(this._images[0]);
-    }
+    const nextIndex = index === -1 ? 0 : (index + 1) % this._images.length;
+    this._setCurrentImage(this._images[nextIndex]);
   }
 
   prev() {
     if (!this._images.length) return;
     const index = this._images.indexOf(this._current);
-    if (index === -1) {
-      this._setCurrentImage(this._images[this._images.length - 1]);
-    } else if (index > 0) {
-      this._setCurrentImage(this._images[index - 1]);
-    } else {
-      // Wrap around
-      this._setCurrentImage(this._images[this._images.length - 1]);
-    }
+    const prevIndex =
+      index === -1
+        ? this._images.length - 1
+        : (index - 1 + this._images.length) % this._images.length;
+    this._setCurrentImage(this._images[prevIndex]);
   }
 
   keyHandler(e) {
@@ -346,29 +297,17 @@ class Gallery {
   // ---------------------------------------------------------------------------
 
   _initializeImages(selector, active) {
-    const nodes = document.querySelectorAll(selector);
-    const result = [];
-    nodes.forEach((node) => {
-      const image = this._buildImage(node, active);
-      if (image) result.push(image);
-    });
-    return result;
+    return [...document.querySelectorAll(selector)]
+      .map((node) => this._buildImage(node, active))
+      .filter(Boolean);
   }
 
-  /**
-   * Constructs an Image instance from a DOM node.
-   * Returns null if the node is invalid.
-   * @param {Element} dom
-   * @param {boolean} active
-   * @returns {Image|null}
-   */
   _buildImage(dom, active) {
     if (!dom || !isDomNode(dom)) return null;
 
     const imgEl = dom.querySelector("img");
-    const datafilename = imgEl?.getAttribute("data-filename");
-    const filename = datafilename
-      ? basename(datafilename)
+    const filename = imgEl?.getAttribute("data-filename")
+      ? basename(imgEl.getAttribute("data-filename"))
       : imgEl
         ? basename(imgEl.src)
         : null;
@@ -387,13 +326,14 @@ class Gallery {
   }
 
   _buildImageDom(src, filename) {
-    if (!src) return null;
-    return htmlToElement(`<div class="Image">
-      <div class="Image__container">
-        <img class="lazy miniarch" src="./assets/css/loading.gif" data-src="${src}" data-filename="${filename}" title="${filename} preview" />
+    return htmlToElement(`
+      <div class="Image">
+        <div class="Image__container">
+          <img class="lazy miniarch" src="./assets/css/loading.gif" data-src="${src}" data-filename="${filename}" title="${filename} preview" />
+        </div>
+        <div class="Image__caption"><span contenteditable="true">${stripExtension(filename)}</span></div>
       </div>
-      <div class="Image__caption"><span contenteditable="true">${stripExtension(filename)}</span></div>
-    </div>`);
+    `);
   }
 }
 

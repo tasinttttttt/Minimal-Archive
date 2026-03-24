@@ -9,6 +9,7 @@ import {
   API_UPLOAD,
   SELECTOR_TITLE,
   SELECTOR_NOTE,
+  SELECTOR_SORT_ORDER,
 } from "./Constants.js";
 import {
   areObjectsEqual,
@@ -136,6 +137,11 @@ class Editor {
 
     this.options = mergeSettings(options, defaults);
 
+    // Initialize private color/font properties with default values
+    this._bgColor = this.options.bgColor;
+    this._textColor = this.options.textColor;
+    this._fontFamily = this.options.fontFamily;
+
     // Bind all methods that are used as callbacks
     this.actionSave = this.actionSave.bind(this);
     this.actionCancel = this.actionCancel.bind(this);
@@ -154,6 +160,9 @@ class Editor {
     // In-memory state — single source of truth
     this._state = null;
     this._backup = null;
+
+    // Event listener tracking for cleanup
+    this._listeners = [];
 
     this.files = [];
     this.init(this.options);
@@ -211,12 +220,11 @@ class Editor {
     }
 
     this._menu = new Menu();
-    (() =>
-      new Modal({
-        target: ".modal",
-        active: true,
-        triggers: ".modal__bg, .modal__close",
-      }))();
+    this._modal = new Modal({
+      target: ".modal",
+      active: true,
+      triggers: ".modal__bg, .modal__close",
+    });
 
     // Apply initial display properties
     this._applyBgColor(bgColor);
@@ -229,7 +237,7 @@ class Editor {
 
     this.initListeners();
 
-    const sortOrderSelect = document.querySelector("#sort_order");
+    const sortOrderSelect = document.querySelector(SELECTOR_SORT_ORDER);
     if (sortOrderSelect) {
       sortOrderSelect.addEventListener("change", (e) => {
         this._state.sortorder = e.target.value;
@@ -281,6 +289,7 @@ class Editor {
    * @param {Event} e
    */
   editDeleteImage(e) {
+    if (!this._state?.images) return;
     const id = this._getIdFromEvent(e);
     if (id) {
       this._gallery.removeImageById(id);
@@ -293,6 +302,7 @@ class Editor {
    * @param {Event} e
    */
   editRevertImage(e) {
+    if (!this._state?.images) return;
     const id = this._getIdFromEvent(e);
     if (id) {
       this._gallery.revertRemoveImageById(id);
@@ -355,25 +365,52 @@ class Editor {
     const events = ["dragenter", "dragover", "dragleave", "drop"];
     events.forEach((eventName) => {
       this._dropArea.addEventListener(eventName, preventDefaults, false);
+      this._listeners.push({
+        el: this._dropArea,
+        event: eventName,
+        fn: preventDefaults,
+      });
       document.body.addEventListener(eventName, preventDefaults, false);
+      this._listeners.push({
+        el: document.body,
+        event: eventName,
+        fn: preventDefaults,
+      });
     });
 
     if (this._fullscreenDropZone) {
-      document.addEventListener(
-        "dragenter",
-        () => this._dropArea.classList.add("active"),
-        true,
-      );
-      this._dropArea.addEventListener("dragleave", () =>
-        this._dropArea.classList.remove("active"),
-      );
-      this._dropArea.addEventListener("drop", () =>
-        this._dropArea.classList.remove("active"),
-      );
+      const dragEnterHandler = () => this._dropArea.classList.add("active");
+      document.addEventListener("dragenter", dragEnterHandler, true);
+      this._listeners.push({
+        el: document,
+        event: "dragenter",
+        fn: dragEnterHandler,
+      });
+
+      const dragLeaveHandler = () => this._dropArea.classList.remove("active");
+      this._dropArea.addEventListener("dragleave", dragLeaveHandler);
+      this._listeners.push({
+        el: this._dropArea,
+        event: "dragleave",
+        fn: dragLeaveHandler,
+      });
+
+      const dropHandler = () => this._dropArea.classList.remove("active");
+      this._dropArea.addEventListener("drop", dropHandler);
+      this._listeners.push({
+        el: this._dropArea,
+        event: "drop",
+        fn: dropHandler,
+      });
     }
 
     ["dragenter", "dragover"].forEach((eventName) => {
       this._dropArea.addEventListener(eventName, () => this.highlight(), false);
+      this._listeners.push({
+        el: this._dropArea,
+        event: eventName,
+        fn: () => this.highlight(),
+      });
     });
     ["dragleave", "drop"].forEach((eventName) => {
       this._dropArea.addEventListener(
@@ -381,15 +418,32 @@ class Editor {
         () => this.unhighlight(),
         false,
       );
+      this._listeners.push({
+        el: this._dropArea,
+        event: eventName,
+        fn: () => this.unhighlight(),
+      });
     });
 
-    this._dropArea.addEventListener("drop", (e) => this.handleDrop(e), false);
+    const dropHandler = (e) => this.handleDrop(e);
+    this._dropArea.addEventListener("drop", dropHandler, false);
+    this._listeners.push({
+      el: this._dropArea,
+      event: "drop",
+      fn: dropHandler,
+    });
 
     if (this._fileInput) {
-      this._fileInput.addEventListener("change", (e) => {
+      const fileInputHandler = (e) => {
         if (e.target?.files) {
           this.handleFiles(e.target.files);
         }
+      };
+      this._fileInput.addEventListener("change", fileInputHandler);
+      this._listeners.push({
+        el: this._fileInput,
+        event: "change",
+        fn: fileInputHandler,
       });
     }
 
@@ -461,6 +515,36 @@ class Editor {
     return this._menu;
   }
 
+  /**
+   * Cleanup method to remove all event listeners and reset state.
+   * Call this when destroying the Editor instance to prevent memory leaks.
+   */
+  destroy() {
+    // Remove all tracked event listeners
+    this._listeners.forEach(({ el, event, fn }) => {
+      el.removeEventListener(event, fn);
+    });
+    this._listeners = [];
+
+    // Clear upload queue
+    this._uploadQueue = [];
+
+    // Dismiss any active toasts
+    if (this._uploadToast) {
+      this._uploadToast.dismiss();
+      this._uploadToast = null;
+    }
+
+    // Null out references
+    this._state = null;
+    this._backup = null;
+    this._gallery = null;
+    this._menu = null;
+    this._modal = null;
+    this._dropArea = null;
+    this._fileInput = null;
+  }
+
   // ---------------------------------------------------------------------------
   // File handling
   // ---------------------------------------------------------------------------
@@ -500,60 +584,68 @@ class Editor {
   // ---------------------------------------------------------------------------
 
   _processUploadQueue() {
-    while (
-      this._uploadQueue.length > 0 &&
-      this._activeUploads < MAX_CONCURRENT_UPLOADS
-    ) {
-      const file = this._uploadQueue.shift();
-      this._activeUploads++;
+    try {
+      while (
+        this._uploadQueue.length > 0 &&
+        this._activeUploads < MAX_CONCURRENT_UPLOADS
+      ) {
+        const file = this._uploadQueue.shift();
+        this._activeUploads++;
 
-      // We wrap the entire execution in a promise chain to catch
-      // synchronous errors (like a failing formData.append or a missing method)
-      Promise.resolve()
-        .then(() => this._uploadFile(file))
-        .then((result) => {
-          if (result?.data?.length && result.data[0]) {
-            const fileData = result.data[0];
-            this.previewFile(file, fileData.name);
-            this.files.push(fileData);
-            this._state.images.push({
-              id: fileData.id ?? fileData.name,
-              filename: fileData.name,
-              newfilename: stripExtension(fileData.name),
-            });
-          }
-        })
-        .catch((err) => {
-          this.onError("upload", err);
-          Toast.show(`Upload failed: "${file.name}"`, "error");
-        })
-        .finally(() => {
-          this._activeUploads--;
-          this._uploadDone++;
+        // We wrap the entire execution in a promise chain to catch
+        // synchronous errors (like a failing formData.append or a missing method)
+        Promise.resolve()
+          .then(() => this._uploadFile(file))
+          .then((result) => {
+            if (result?.data?.length && result.data[0]) {
+              const fileData = result.data[0];
+              this.previewFile(file, fileData.name);
+              this.files.push(fileData);
+              this._state.images.push({
+                id: fileData.id ?? fileData.name,
+                filename: fileData.name,
+                newfilename: stripExtension(fileData.name),
+              });
+            }
+          })
+          .catch((err) => {
+            this.onError("upload", err);
+            Toast.show(`Upload failed: "${file.name}"`, "error");
+          })
+          .finally(() => {
+            this._activeUploads--;
+            this._uploadDone++;
 
-          const done = this._uploadDone;
-          const total = this._uploadTotal;
-          const isQueueEmpty = this._uploadQueue.length === 0;
-          const isProcessingComplete =
-            this._activeUploads === 0 && isQueueEmpty;
+            const done = this._uploadDone;
+            const total = this._uploadTotal;
+            const isQueueEmpty = this._uploadQueue.length === 0;
+            const isProcessingComplete =
+              this._activeUploads === 0 && isQueueEmpty;
 
-          this._uploadToast?.update(
-            isProcessingComplete
-              ? `Uploaded ${total} ${total === 1 ? "file" : "files"}`
-              : `Uploading… ${done} / ${total}`,
-          );
+            this._uploadToast?.update(
+              isProcessingComplete
+                ? `Uploaded ${total} ${total === 1 ? "file" : "files"}`
+                : `Uploading… ${done} / ${total}`,
+            );
 
-          if (isProcessingComplete) {
-            const toast = this._uploadToast;
-            this._uploadToast = null;
-            this._uploadTotal = 0;
-            this._uploadDone = 0;
-            setTimeout(() => toast?.dismiss(), 1200);
-          }
+            if (isProcessingComplete) {
+              const toast = this._uploadToast;
+              this._uploadToast = null;
+              this._uploadTotal = 0;
+              this._uploadDone = 0;
+              setTimeout(() => toast?.dismiss(), 1200);
+            }
 
-          // Trigger the next items in the queue
-          this._processUploadQueue();
-        });
+            // Trigger the next items in the queue
+            this._processUploadQueue();
+          });
+      }
+    } catch (err) {
+      // Reset counters on synchronous errors
+      this._uploadTotal = 0;
+      this._uploadDone = 0;
+      this._uploadQueue = [];
+      this.onError("upload", err);
     }
   }
 
@@ -639,8 +731,14 @@ class Editor {
       newfilename: removeHtml(image.caption),
     }));
 
-    const sortOrderEl = document.querySelector("#sort_order");
+    const sortOrderEl = document.querySelector(SELECTOR_SORT_ORDER);
     if (sortOrderEl) state.sortorder = sortOrderEl.value;
+
+    // CRITICAL: Include current color/font values from private properties
+    // Setters update these properties but not this._state, so we must include them here
+    state.bgcolor = this._bgColor;
+    state.textcolor = this._textColor;
+    state.fontfamily = this._fontFamily;
 
     return state;
   }
@@ -673,14 +771,15 @@ class Editor {
       newfilename: removeHtml(image.caption),
     }));
 
-    const sortOrderEl = document.querySelector("#sort_order");
+    const sortOrderEl = document.querySelector(SELECTOR_SORT_ORDER);
     if (sortOrderEl) state.sortorder = sortOrderEl.value;
 
     return state;
   }
 
   _cloneState(state) {
-    // Deep clone via JSON — state contains only serializable data
+    // Deep clone via JSON — state contains only serializable data (strings, arrays, objects)
+    // This is intentional: Editor state should never contain non-serializable values
     return JSON.parse(JSON.stringify(state));
   }
 
@@ -746,7 +845,10 @@ class Editor {
   }
 
   unhighlight() {
-    this._dropArea.classList.remove("highlight");
+    // Only unhighlight if drag truly left the drop area (not over child elements)
+    if (!this._dropArea.contains(event?.relatedTarget)) {
+      this._dropArea.classList.remove("highlight");
+    }
   }
 
   // ---------------------------------------------------------------------------

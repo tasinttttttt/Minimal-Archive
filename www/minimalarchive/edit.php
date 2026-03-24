@@ -228,7 +228,6 @@ if ($access_granted):
                                 <span><?= translate('add_images') ?></span>
                             </div>
                             <input id="file-input" type="file" name="image_upload" multiple accept='image/*' />
-                            <progress class="progress-bar" value="0" max="100"></progress>
                         </div>
                     </div>
 

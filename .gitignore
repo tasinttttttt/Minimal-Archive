@@ -77,11 +77,10 @@ node_modules
 # phpunit
 .phpunit.result.cache
 .phpunit.cache
-/www/minimalarchive/phpunit.xml
-/www/minimalarchive/phpunit.xml
-/www/minimalarchive/build/
+phpunit*
+build/
 
-www/minimalarchive/var/*
-www/assets/images/*
-www/meta.txt
-www/images/*
+assets/images
+images
+var
+meta.txt
