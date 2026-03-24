@@ -202,7 +202,7 @@ function getImagesInFolder(?string $folder = null, string $order = 'asc')
     );
     try {
         $images = getFilenamesInFolder($folder, $supported_formats);
-        usort($images, function($a, $b) use ($order) {
+        usort($images, function ($a, $b) use ($order) {
             if ($order === 'desc') {
                 return strcasecmp($b, $a);
             }
@@ -265,6 +265,20 @@ function check_uploadedfile($file, $max_filesize = 2097152)
     return true;
 }
 
+function get_upload_error_slug(int $errorCode): string
+{
+    return match ($errorCode) {
+        UPLOAD_ERR_INI_SIZE   => 'File is too large (>' . ini_get('upload_max_filesize') . ')',
+        UPLOAD_ERR_FORM_SIZE  => 'File is too large',
+        UPLOAD_ERR_PARTIAL    => 'File is partially uploaded',
+        UPLOAD_ERR_NO_FILE    => 'No file was selected',
+        UPLOAD_ERR_NO_TMP_DIR => 'No temporary directory is available',
+        UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
+        UPLOAD_ERR_EXTENSION  => 'A PHP extension blocked the file upload',
+        default               => 'Unknown upload error',
+    };
+}
+
 /**
  * Saves a file, non destructive, finds a name if filename exists
  * @param  array $file
@@ -275,30 +289,36 @@ function check_uploadedfile($file, $max_filesize = 2097152)
  */
 function save_file(array $file, ?string $name, string $folder = VAR_FOLDER, bool $overwrite = false): string
 {
-    if (!$file) {
+    if (empty($file) || (isset($file['error']) && $file['error'] === UPLOAD_ERR_NO_FILE)) {
         return '';
     }
 
-    $filename = $name ?: $file['name'];
-    if (!$file["tmp_name"] || !$file["type"]) {
-        throw new Exception("bad_file", 1);
+    if (isset($file['error']) && $file['error'] !== UPLOAD_ERR_OK) {
+        throw new Exception(get_upload_error_slug($file['error']), $file['error']);
     }
+
+    // Identify structural failures if error code is somehow 0 but data is missing
+    if (empty($file["tmp_name"]) || empty($file["type"])) {
+        throw new Exception("invalid_file_structure", 1);
+    }
+
+    $filename = $name ?: $file['name'];
     $basename = basename($filename);
     $extension = pathinfo($basename, PATHINFO_EXTENSION);
     $name = pathinfo($basename, PATHINFO_FILENAME);
+
     if ($overwrite) {
         $correctFilename = $filename;
     } else {
-        $correctFilename = "";
-        if (file_exists($folder . DS . $basename)) {
-            $correctFilename = sanitize_filename($name) . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
-        } else {
-            $correctFilename = sanitize_filename(basename($filename));
-        }
+        $correctFilename = file_exists($folder . DS . $basename)
+            ? sanitize_filename($name) . '_' . bin2hex(random_bytes(4)) . '.' . $extension
+            : sanitize_filename($basename);
     }
+
     if (!move_uploaded_file($file['tmp_name'], $folder . DS . $correctFilename)) {
-        throw new Exception("file_upload_error", 1);
+        throw new Exception("move_failed", 1);
     }
+
     return $correctFilename;
 }
 

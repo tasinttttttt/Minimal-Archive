@@ -98,7 +98,10 @@ export class Fetch {
     url,
     request,
     credentials = "same-origin",
-    headers = { Accept: "application/json", "Content-Type": "application/json" }
+    headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
   ) {
     function processResponse(response) {
       return new Promise((resolve, reject) => {
@@ -111,7 +114,7 @@ export class Fetch {
             code: data.code,
             data: data.data,
             message: data.message,
-          })
+          }),
         );
       });
     }
@@ -130,7 +133,6 @@ export class Fetch {
           resolve(response);
         })
         .catch((response) => {
-          console.log(response);
           reject(response.message);
         });
     });
@@ -244,6 +246,6 @@ export const uuidv4 = () => {
     (
       c ^
       (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))
-    ).toString(16)
+    ).toString(16),
   );
 };

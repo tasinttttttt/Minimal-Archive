@@ -98,30 +98,6 @@ main {
   font-family: variables.$defaultFont;
 }
 
-.progress-bar {
-  width: 100%;
-  height: 4px;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-  margin: 10px 0;
-
-  &::-webkit-progress-bar {
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 2px;
-  }
-
-  &::-webkit-progress-value {
-    background: variables.$sidebarBackground;
-    transition: width 0.2s ease;
-  }
-
-  &::-moz-progress-bar {
-    background: variables.$sidebarBackground;
-    border-radius: 2px;
-  }
-}
-
 .editbutton.sort {
   select {
     width: 100%;
@@ -131,4 +107,27 @@ main {
     border-radius: 4px;
     font-family: variables.$defaultFont;
   }
+}
+
+/* Default state */
+.button--revert {
+  display: none;
+}
+
+.button--delete {
+  display: inline-block;
+}
+
+/* Deleted state */
+.Image--deleted .button--delete {
+  display: none;
+}
+
+.Image--deleted .button--revert {
+  display: inline-block;
+}
+
+/* Optional: Visual feedback for the image itself */
+.Image--deleted img {
+  opacity: 0.6;
 }

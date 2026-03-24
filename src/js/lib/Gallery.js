@@ -53,7 +53,6 @@ class Gallery {
     this._imagesBackup = [...this._images];
     this._lazyload = new LazyLoad({ elements_selector: lazyloadSelector });
 
-    // Activate or deactivate, applying all side effects via the proper methods
     this[active ? "activate" : "deactivate"](true);
   }
 
@@ -204,19 +203,27 @@ class Gallery {
   // ---------------------------------------------------------------------------
 
   updateImage(e) {
-    this._setCurrentImage(
-      e?.detail?.image instanceof Image ? e.detail.image : null,
-    );
+    const newImage = e?.detail?.image instanceof Image ? e.detail.image : null;
+    if (newImage && newImage !== this._current) {
+      this._setCurrentImage(newImage);
+    }
   }
 
   _setCurrentImage(image) {
-    if (this._current instanceof Image) this._current.status = false;
+    if (this._current instanceof Image && this._current !== image) {
+      this._current.status = false;
+    }
     this._current = image;
     if (this._current instanceof Image) {
-      this._current.status = true;
-      this._current.dom.scrollIntoView({ behavior: "smooth" });
+      if (this._current.status !== true) {
+        this._current.status = true;
+      }
+      this._current.dom.scrollIntoView({
+        block: "center",
+        inline: "center",
+      });
     } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      window.scrollTo({ top: 0 });
     }
   }
 

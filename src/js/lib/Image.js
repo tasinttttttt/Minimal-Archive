@@ -32,7 +32,6 @@ class Image {
       defaults,
     );
 
-    // Fix: arrow class fields replace manual bind boilerplate
     this.applyStyle = () => {
       if (this._dom) {
         if (this._status) {
@@ -61,7 +60,6 @@ class Image {
       }
     };
 
-    // Setting state
     this._id = uuidv4();
     this._dom = isDomNode(dom) ? dom : this.generateDom(url, filename, caption);
     if (!this._dom) {
@@ -76,7 +74,6 @@ class Image {
     this._status = false;
     this._editable = editable;
 
-    // Initializing style and initial listeners
     this.applyStyle();
     if (this._active) {
       this.activate(true);
@@ -114,9 +111,8 @@ class Image {
     document.removeEventListener(EVENT_RESET, this.resetStatus);
   }
 
-  // Fix: single unified private method for all status changes — setter, toggle, and reset
-  // all go through here, ensuring EVENT_STATUS_CHANGE and EVENT_IMAGE_UPDATE always fire together
   _setStatus(value) {
+    if (this._status === value) return; // Early exit if no change
     this._status = value;
     this.applyStyle();
     if (this._dom) {
@@ -131,7 +127,7 @@ class Image {
 
   generateDom(src, filename, caption) {
     if (!src) return null;
-    // Fix: sanitize all interpolated values including title
+
     return htmlToElement(`<div class="Image">
       <div class="Image__container">
         <img class="lazy miniarch" src="./assets/css/loading.gif" data-src="${removeHtml(src)}" data-filename="${removeHtml(filename)}" title="${removeHtml(filename)} preview" />
@@ -140,7 +136,6 @@ class Image {
       </div>`);
   }
 
-  // Fix: add destroy to clean up caption listener, which removeListeners doesn't cover
   destroy() {
     this.deactivate(true);
     if (this._captionSelector) {
@@ -150,12 +145,10 @@ class Image {
     this._captionSelector = null;
   }
 
-  // Fix: expose as getter to match the rest of the accessor interface
   get id() {
     return this._id;
   }
 
-  // Fix: removed surprising generateDom fallback — dom getter returns what's stored
   get dom() {
     return this._dom;
   }
@@ -166,7 +159,7 @@ class Image {
   get status() {
     return this._status;
   }
-  // Fix: status setter goes through _setStatus so both events always fire
+
   set status(value) {
     this._setStatus(value);
   }

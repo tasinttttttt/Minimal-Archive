@@ -22,15 +22,10 @@
   @media screen and (min-width: variables.$mobileBreakPoint) {
     width: 20dvw;
     height: 20dvw;
-    // max-height: 76dvh;
   }
   @media screen and (min-width: variables.$largeBreakPoint) {
     width: calc(9.725% - 0.53em);
     height: 12dvw;
-    // width: 12dvw;
-    // height: 12dvw;
-    // height: 150px;
-    // padding: 2em 1em 1em 1em;
   }
   img {
     max-width: 100%;
@@ -48,16 +43,14 @@
 .Image__container {
   overflow: hidden;
   text-align: center;
-  // flex: 2;
-  // img {
-  //   max-height: 100%;
-  //   max-width: 80%;
-  // }
 }
 
-.Image:hover {
-  .Image__controls {
-    display: block;
+.Gallery--inactive {
+  .Image:hover {
+    .Image__controls {
+      display: block;
+    }
+    background-color: rgba(255, 200, 200, 1);
   }
 }
 .Image__controls {
@@ -85,7 +78,6 @@
     auto;
   user-select: none;
   width: auto;
-  // height: auto;
   height: 100dvh;
   width: 100%;
   min-height: 180px;
@@ -109,7 +101,6 @@
 }
 
 .Image__caption {
-  // height: 20px;
   display: flex;
   justify-content: center;
   align-items: flex-end;

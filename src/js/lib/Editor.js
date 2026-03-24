@@ -23,75 +23,9 @@ import {
   removeHtml,
   Fetch,
 } from "./Helpers.js";
+import Toast from "./Toast.js";
 
 const MAX_CONCURRENT_UPLOADS = 3;
-const TOAST_DURATION_MS = 4000;
-
-// ---------------------------------------------------------------------------
-// Toast — self-contained, no markup required in the host page
-// ---------------------------------------------------------------------------
-
-const Toast = (() => {
-  let container = null;
-
-  function getContainer() {
-    if (!container) {
-      container = htmlToElement(
-        `<div class="Toast__container" aria-live="polite" aria-atomic="false"></div>`,
-      );
-      document.body.appendChild(container);
-    }
-    return container;
-  }
-
-  /**
-   * @param {string} message
-   * @param {'error'|'info'|'success'} type
-   * @param {number} duration  ms before auto-dismiss (0 = sticky)
-   * @returns {{ update: (msg: string) => void, dismiss: () => void }}
-   */
-  function show(message, type = "error", duration = TOAST_DURATION_MS) {
-    const toast = htmlToElement(`
-      <div class="Toast Toast--${type}" role="alert">
-        <span class="Toast__message">${message}</span>
-        <button class="Toast__close" aria-label="Dismiss">✕</button>
-      </div>
-    `);
-
-    const msgEl = toast.querySelector(".Toast__message");
-    let dismissTimer = null;
-    let dismissed = false;
-
-    const remove = () => {
-      if (toast.parentNode) toast.remove();
-    };
-
-    const dismiss = () => {
-      if (dismissed) return;
-      dismissed = true;
-      clearTimeout(dismissTimer);
-      toast.classList.add("Toast--leaving");
-      // animationend is unreliable when competing with the enter animation —
-      // use a hard timeout as the primary removal path.
-      setTimeout(remove, 300);
-    };
-
-    const update = (msg) => {
-      msgEl.textContent = msg;
-    };
-
-    toast.querySelector(".Toast__close").addEventListener("click", dismiss);
-
-    if (duration > 0) {
-      dismissTimer = setTimeout(dismiss, duration);
-    }
-
-    getContainer().appendChild(toast);
-    return { update, dismiss };
-  }
-
-  return { show };
-})();
 
 /**
  * Provides editing capabilities.
@@ -148,6 +82,7 @@ class Editor {
     this.actionUpdate = this.actionUpdate.bind(this);
     this._processUploadQueue = this._processUploadQueue.bind(this);
     this._uploadProgressMessage = this._uploadProgressMessage.bind(this);
+    this.cleanupControls = this.cleanupControls.bind(this);
 
     // Upload queue state
     this._uploadQueue = [];
@@ -236,14 +171,6 @@ class Editor {
     this._backup = this._cloneState(this._state);
 
     this.initListeners();
-
-    const sortOrderSelect = document.querySelector(SELECTOR_SORT_ORDER);
-    if (sortOrderSelect) {
-      sortOrderSelect.addEventListener("change", (e) => {
-        this._state.sortorder = e.target.value;
-        this._gallery.setImages(this._gallery.images, this._state.sortorder);
-      });
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -286,30 +213,39 @@ class Editor {
 
   /**
    * Marks an image for deletion.
-   * @param {Event} e
+   * @param {Event|string|number} idOrEvent
    */
-  editDeleteImage(e) {
+  editDeleteImage(id, imageElement) {
     if (!this._state?.images) return;
-    const id = this._getIdFromEvent(e);
+
     if (id) {
       this._gallery.removeImageById(id);
       this._state.images = this._state.images.filter((img) => img.id !== id);
+
+      // Add class to toggle button visibility
+      if (imageElement) {
+        imageElement.classList.add("Image--deleted");
+      }
     }
   }
 
   /**
    * Recovers a previously deleted image.
-   * @param {Event} e
+   * @param {Event|string|number} idOrEvent
    */
-  editRevertImage(e) {
+  editRevertImage(id, imageElement) {
     if (!this._state?.images) return;
-    const id = this._getIdFromEvent(e);
+
     if (id) {
       this._gallery.revertRemoveImageById(id);
-      // Restore image entry in state from backup
       const reverted = this._backup.images.find((img) => img.id === id);
       if (reverted && !this._state.images.find((img) => img.id === id)) {
         this._state.images.push({ ...reverted });
+      }
+
+      // Remove class to toggle button visibility
+      if (imageElement) {
+        imageElement.classList.remove("Image--deleted");
       }
     }
   }
@@ -324,6 +260,7 @@ class Editor {
 
     if (Array.isArray(images)) {
       this._gallery.setImages(images, sortorder);
+      // this.cleanupControls();
       this._gallery.images.forEach((image) => this.addControlsToImage(image));
       this._state.images = images.map((img) => ({ ...img }));
     }
@@ -362,22 +299,18 @@ class Editor {
   // ---------------------------------------------------------------------------
 
   initListeners() {
+    // --- Drag/Drop Listeners ---
     const events = ["dragenter", "dragover", "dragleave", "drop"];
     events.forEach((eventName) => {
-      this._dropArea.addEventListener(eventName, preventDefaults, false);
-      this._listeners.push({
-        el: this._dropArea,
-        event: eventName,
-        fn: preventDefaults,
-      });
-      document.body.addEventListener(eventName, preventDefaults, false);
-      this._listeners.push({
-        el: document.body,
-        event: eventName,
-        fn: preventDefaults,
-      });
+      const fn = preventDefaults.bind(this);
+      this._dropArea.addEventListener(eventName, fn, false);
+      this._listeners.push({ el: this._dropArea, event: eventName, fn });
+
+      document.body.addEventListener(eventName, fn, false);
+      this._listeners.push({ el: document.body, event: eventName, fn });
     });
 
+    // --- Fullscreen Drop Zone Listeners ---
     if (this._fullscreenDropZone) {
       const dragEnterHandler = () => this._dropArea.classList.add("active");
       document.addEventListener("dragenter", dragEnterHandler, true);
@@ -404,27 +337,20 @@ class Editor {
       });
     }
 
+    // --- Highlight/Unlight Listeners ---
     ["dragenter", "dragover"].forEach((eventName) => {
-      this._dropArea.addEventListener(eventName, () => this.highlight(), false);
-      this._listeners.push({
-        el: this._dropArea,
-        event: eventName,
-        fn: () => this.highlight(),
-      });
-    });
-    ["dragleave", "drop"].forEach((eventName) => {
-      this._dropArea.addEventListener(
-        eventName,
-        () => this.unhighlight(),
-        false,
-      );
-      this._listeners.push({
-        el: this._dropArea,
-        event: eventName,
-        fn: () => this.unhighlight(),
-      });
+      const fn = () => this.highlight();
+      this._dropArea.addEventListener(eventName, fn, false);
+      this._listeners.push({ el: this._dropArea, event: eventName, fn });
     });
 
+    ["dragleave", "drop"].forEach((eventName) => {
+      const fn = () => this.unhighlight();
+      this._dropArea.addEventListener(eventName, fn, false);
+      this._listeners.push({ el: this._dropArea, event: eventName, fn });
+    });
+
+    // --- Drop Handler ---
     const dropHandler = (e) => this.handleDrop(e);
     this._dropArea.addEventListener("drop", dropHandler, false);
     this._listeners.push({
@@ -433,11 +359,10 @@ class Editor {
       fn: dropHandler,
     });
 
+    // --- File Input Listener ---
     if (this._fileInput) {
       const fileInputHandler = (e) => {
-        if (e.target?.files) {
-          this.handleFiles(e.target.files);
-        }
+        if (e.target?.files) this.handleFiles(e.target.files);
       };
       this._fileInput.addEventListener("change", fileInputHandler);
       this._listeners.push({
@@ -447,7 +372,25 @@ class Editor {
       });
     }
 
-    // Add controls to existing gallery images — only once
+    // --- Sort Order Listener ---
+    const sortOrderSelect = document.querySelector(SELECTOR_SORT_ORDER);
+    if (sortOrderSelect) {
+      const sortHandler = (e) => {
+        this._state.sortorder = e.target.value;
+        this._gallery.setImages(this._gallery.images, this._state.sortorder);
+        // Uncomment the next line if you want to cleanup controls before re-adding them
+        this.cleanupControls();
+        this._gallery.images.forEach((image) => this.addControlsToImage(image));
+      };
+      sortOrderSelect.addEventListener("change", sortHandler);
+      this._listeners.push({
+        el: sortOrderSelect,
+        event: "change",
+        fn: sortHandler,
+      });
+    }
+
+    // --- Add Controls to Existing Images ---
     this._gallery.images.forEach((image) => this.addControlsToImage(image));
   }
 
@@ -461,23 +404,42 @@ class Editor {
    * @param {Image} image
    */
   addControlsToImage(image) {
-    if (image.dom.querySelector(".Image__controls")) return;
+    const oldControls = image.dom.querySelector(".Image__controls");
+    if (oldControls) oldControls.remove();
 
-    const deleteButton = this._getImageButton("╳", "button--delete", image.id);
-    const revertButton = this._getImageButton("⏪", "button--revert", image.id);
+    const deleteButton = this._getImageButton(
+      `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+  <polyline points="3 6 5 6 21 6"></polyline>
+  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+</svg>`,
+      "button--delete",
+      image.id,
+    );
+    const revertButton = this._getImageButton(
+      `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+  <polyline points="1 4 1 10 7 10"></polyline>
+  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+</svg>`,
+      "button--revert",
+      image.id,
+    );
     const imageControls = htmlToElement('<div class="Image__controls"></div>');
 
     imageControls.appendChild(deleteButton);
     imageControls.appendChild(revertButton);
     image.dom.appendChild(imageControls);
 
-    this.menu.addButton({
-      type: "toggle",
-      domNode: deleteButton,
-      domNode2: revertButton,
-      callback: this.editDeleteImage.bind(this),
-      callback2: this.editRevertImage.bind(this),
-    });
+    // Pass both the ID and the image DOM node
+    const handleDeleteClick = () => this.editDeleteImage(image.id, image.dom);
+    const handleRevertClick = () => this.editRevertImage(image.id, image.dom);
+
+    deleteButton.addEventListener("click", handleDeleteClick);
+    revertButton.addEventListener("click", handleRevertClick);
+
+    this._listeners.push(
+      { el: deleteButton, event: "click", fn: handleDeleteClick },
+      { el: revertButton, event: "click", fn: handleRevertClick },
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -513,6 +475,20 @@ class Editor {
   }
   get menu() {
     return this._menu;
+  }
+
+  cleanupControls() {
+    this._listeners = this._listeners.filter(({ event, fn }) => {
+      if (
+        event === "Menu cleanup" ||
+        (event === "click" && fn === this.editDeleteImage) ||
+        fn === this.editRevertImage
+      ) {
+        if (typeof fn === "function") fn();
+        return false;
+      }
+      return true;
+    });
   }
 
   /**
@@ -610,7 +586,7 @@ class Editor {
           })
           .catch((err) => {
             this.onError("upload", err);
-            Toast.show(`Upload failed: "${file.name}"`, "error");
+            Toast.show(`"${err}"`, "error");
           })
           .finally(() => {
             this._activeUploads--;
@@ -624,8 +600,8 @@ class Editor {
 
             this._uploadToast?.update(
               isProcessingComplete
-                ? `Uploaded ${total} ${total === 1 ? "file" : "files"}`
-                : `Uploading… ${done} / ${total}`,
+                ? `Processed ${total} ${total === 1 ? "file" : "files"}`
+                : `Processing… ${done} / ${total}`,
             );
 
             if (isProcessingComplete) {
@@ -654,7 +630,7 @@ class Editor {
    * @returns {string}
    */
   _uploadProgressMessage() {
-    return `Uploading… 0 / ${this._uploadTotal}`;
+    return `Processing… 0 / ${this._uploadTotal}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -810,11 +786,14 @@ class Editor {
 
   _getImageButton(content, buttonClass, id) {
     return htmlToElement(
-      `<div class="pure-button ${buttonClass}" data-id="${id}"><span>${content}</span></div>`,
+      `<button class="pure-button ${buttonClass}" data-id="${id}" type="button">
+      ${content}
+    </button>`,
     );
   }
 
   _getIdFromEvent(e) {
+    if (typeof e === "string" || typeof e === "number") return e;
     if (!e) return null;
     return (
       e.target?.getAttribute("data-id") ||
